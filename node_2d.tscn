@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://dlnbvt6v3yvq1"]
+
+[ext_resource type="Texture2D" uid="uid://comm03bhnskme" path="res://icon.svg" id="1_wtcfe"]
+
+[node name="Node2D" type="RustCanvas"]
+
+[node name="Sprite2D" type="Player" parent="."]
+position = Vector2(1011, 114)
+texture = ExtResource("1_wtcfe")
