@@ -1,12 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://dmhmrtv5wi3g7"]
-
-[ext_resource type="Texture2D" uid="uid://comm03bhnskme" path="res://icon.svg" id="1_ulcgi"]
+[gd_scene format=3 uid="uid://dmhmrtv5wi3g7"]
 
 [node name="Node2D" type="Node2D"]
 
-[node name="Player" type="Player" parent="."]
-position = Vector2(827, 198)
-texture = ExtResource("1_ulcgi")
-
-[node name="RustCanvas" type="RustCanvas" parent="."]
+[node name="RustDrawing" type="RustDrawing" parent="."]
 position = Vector2(338, 207)

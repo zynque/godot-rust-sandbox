@@ -1,6 +1,5 @@
 use godot::prelude::*;
-use godot::classes::{ISprite2D, InputEventMouseButton, Sprite2D};
-use godot::classes::{InputEvent};
+use godot::classes::{InputEventMouseButton, InputEvent};
 use crate::point_vec_extensions::PointVecExtensions;
 
 pub mod point_vec_extensions;
@@ -12,47 +11,40 @@ unsafe impl ExtensionLibrary for GodotRustExtension {}
 
 #[derive(GodotClass)]
 #[class(base=Node2D)]
-struct RustCanvas {
+struct RustDrawing {
     #[base]
-    angular_speed: f64,
+    angular_speed: f32,
     base: Base<Node2D>
 }
 
 #[godot_api]
-impl INode2D for RustCanvas {
+impl INode2D for RustDrawing {
     fn init(base: Base<Node2D>) -> Self {
-        godot_print!("RustCanvas initialized");
+        godot_print!("RustDrawing initialized");
 
         Self {
-            angular_speed: std::f64::consts::PI,
+            angular_speed: std::f32::consts::PI / 4.0,
             base,
         }
     }
 
     fn draw(&mut self) {
-        let points = vec![
-            Vector2::new(0.0, -50.0),
-            Vector2::new(50.0, 50.0),
-            Vector2::new(-50.0, 50.0),
-        ];
+        let polygon = regular_polygon(8, 50.0);
+        let locations = regular_polygon(8, 140.0);
+        let replicated = copy_figure_at(polygon, locations);
 
-        let translated_points = points.translated(Vector2::new(10.0, 10.0));
-        let packed_points = PackedVector2Array::from(translated_points);
+        for points in replicated {
+            let packed_points = PackedVector2Array::from(points);
+            let color = Color::from_rgb(0.2, 0.7, 0.3);
 
-        let color = Color::from_rgb(0.2, 0.8, 0.3);
-
-        // Draw filled polygon
-        self.base_mut().draw_colored_polygon(&packed_points, color);
+            self.base_mut().draw_colored_polygon(&packed_points, color);
+        }
     }
 
-    fn physics_process(&mut self, delta: f64) {
-        // In GDScript, this would be: 
-        // rotation += angular_speed * delta
-        
-        let radians = (self.angular_speed * delta) as f32;
+    fn physics_process(&mut self, delta: f32) {
+      
+        let radians = self.angular_speed * delta;
         self.base_mut().rotate(radians);
-        // The 'rotate' method requires a f32, 
-        // therefore we convert 'self.angular_speed * delta' which is a f64 to a f32
     }
 
     fn input(&mut self, event: Gd<InputEvent>) {
@@ -65,31 +57,27 @@ impl INode2D for RustCanvas {
     }
 }
 
-#[derive(GodotClass)]
-#[class(base=Sprite2D)]
-struct Player {
-    angular_speed: f64,
-    base: Base<Sprite2D>
+fn regular_polygon(sides: usize, radius: f32) -> Vec<Vector2> {
+    let mut points = Vec::with_capacity(sides);
+    let angle_step = std::f32::consts::TAU / sides as f32;
+
+    for i in 0..sides {
+        let angle = i as f32 * angle_step;
+        let x = radius * angle.cos();
+        let y = radius * angle.sin();
+        points.push(Vector2::new(x, y));
+    }
+
+    points
 }
 
-#[godot_api]
-impl ISprite2D for Player {
-    fn init(base: Base<Sprite2D>) -> Self {
-        godot_print!("Hello, world!"); // Prints to the Godot console
-        
-        Self {
-            angular_speed: std::f64::consts::PI,
-            base,
-        }
+fn copy_figure_at(figure: Vec<Vector2>, locations: Vec<Vector2>) -> Vec<Vec<Vector2>> {
+    let mut copies = Vec::with_capacity(locations.len());
+
+    for loc in locations {
+        let translated_figure = figure.translated(loc);
+        copies.push(translated_figure);
     }
 
-    fn physics_process(&mut self, delta: f64) {
-        // In GDScript, this would be: 
-        // rotation += angular_speed * delta
-        
-        let radians = (self.angular_speed * delta) as f32;
-        self.base_mut().rotate(radians);
-        // The 'rotate' method requires a f32, 
-        // therefore we convert 'self.angular_speed * delta' which is a f64 to a f32
-    }
+    copies
 }
