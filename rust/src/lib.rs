@@ -1,9 +1,10 @@
 use godot::prelude::*;
 use godot::classes::{InputEventMouseButton, InputEvent};
 use crate::point_vec_extensions::PointVecExtensions;
+use crate::physics::*;
 
 pub mod point_vec_extensions;
-
+pub mod physics;
 struct GodotRustExtension;
 
 #[gdextension]
@@ -22,6 +23,16 @@ impl INode2D for RustDrawing {
     fn init(base: Base<Node2D>) -> Self {
         godot_print!("RustDrawing initialized");
 
+        let mut physics = new_physics_space().unwrap();
+
+        let polygon = regular_polygon(4, 30.0);
+        let position = Vector2::ZERO;
+        let position2 = Vector2::new(59.99, 0.0);
+        physics.add_area_polygon(&polygon, position);
+        let collides = physics.polygon_collides(&polygon, position2);
+
+        godot_print!("Polygon collides: {}", collides);
+
         Self {
             angular_speed: std::f32::consts::PI / 4.0,
             base,
@@ -29,20 +40,18 @@ impl INode2D for RustDrawing {
     }
 
     fn draw(&mut self) {
-        let polygon = regular_polygon(8, 50.0);
-        let locations = regular_polygon(8, 140.0);
-        let replicated = copy_figure_at(polygon, locations);
+        let polygon: Vec<Vector2> = regular_polygon(5, 30.0);
+        let locations = regular_polygon(8, 80.0);
+        let copies = copy_figure_at(polygon, locations);
+        let color = Color::from_rgba(0.2, 0.7, 0.3, 0.5);
 
-        for points in replicated {
-            let packed_points = PackedVector2Array::from(points);
-            let color = Color::from_rgb(0.2, 0.7, 0.3);
-
+        for polygon in copies {
+            let packed_points = PackedVector2Array::from(polygon);
             self.base_mut().draw_colored_polygon(&packed_points, color);
         }
-    }
+    }   
 
     fn physics_process(&mut self, delta: f32) {
-      
         let radians = self.angular_speed * delta;
         self.base_mut().rotate(radians);
     }
@@ -57,9 +66,10 @@ impl INode2D for RustDrawing {
     }
 }
 
+
 fn regular_polygon(sides: usize, radius: f32) -> Vec<Vector2> {
     let mut points = Vec::with_capacity(sides);
-    let angle_step = std::f32::consts::TAU / sides as f32;
+    let angle_step: f32 = std::f32::consts::TAU / sides as f32;
 
     for i in 0..sides {
         let angle = i as f32 * angle_step;
