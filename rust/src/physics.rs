@@ -47,7 +47,7 @@ impl GodotPhysicsSpace for GodotPhysics {
     let mut server = PhysicsServer2D::singleton();
     let shape = server.convex_polygon_shape_create();
     server.shape_set_data(shape, &Variant::from(PackedVector2Array::from(polygon.as_slice())));
-    let area: Rid = server.area_create();
+    let area = server.area_create();
     server.area_set_space(area, self.space);
     server.area_add_shape(area, shape);
     let transform = Transform2D::IDENTITY.translated(position);

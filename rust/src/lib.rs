@@ -14,7 +14,8 @@ unsafe impl ExtensionLibrary for GodotRustExtension {}
 #[class(base=Node2D)]
 struct RustDrawing {
     #[base]
-    angular_speed: f32,
+    dot_position: Vector2,
+    moving_by: Vector2,
     base: Base<Node2D>
 }
 
@@ -34,38 +35,72 @@ impl INode2D for RustDrawing {
         godot_print!("Polygon collides: {}", collides);
 
         Self {
-            angular_speed: std::f32::consts::PI / 4.0,
+            dot_position: Vector2::ZERO,
+            moving_by: Vector2::ZERO,
             base,
         }
     }
 
     fn draw(&mut self) {
-        let polygon: Vec<Vector2> = regular_polygon(5, 30.0);
-        let locations = regular_polygon(8, 80.0);
-        let copies = copy_figure_at(polygon, locations);
-        let color = Color::from_rgba(0.2, 0.7, 0.3, 0.5);
-
-        for polygon in copies {
-            let packed_points = PackedVector2Array::from(polygon);
-            self.base_mut().draw_colored_polygon(&packed_points, color);
+        let color = Color::from_rgba(0.2, 0.8, 0.3, 1.0);
+        let f = figure();
+        for poly in f {
+            let points = PackedVector2Array::from(poly.translated(self.dot_position));
+            self.base_mut().draw_colored_polygon(&points, color);
         }
     }   
 
-    fn physics_process(&mut self, delta: f32) {
-        let radians = self.angular_speed * delta;
-        self.base_mut().rotate(radians);
+    fn physics_process(&mut self, _delta: f32) {
+        // let radians = self.angular_speed * delta;
+        // self.base_mut().rotate(radians);
+        self.dot_position += self.moving_by;
+        self.base_mut().queue_redraw();
     }
 
     fn input(&mut self, event: Gd<InputEvent>) {
+        if event.is_action_pressed("move_left") {
+            self.moving_by = Vector2::new(-5.0, 0.0);
+        }
+        if event.is_action_pressed("move_right") {
+            self.moving_by = Vector2::new(5.0, 0.0);
+        }
+        if event.is_action_released("move_left") {
+            self.moving_by = Vector2::ZERO;
+        }
+        if event.is_action_released("move_right") {
+            self.moving_by = Vector2::ZERO;
+        }
+
         if let Ok(mouse_event) = event.try_cast::<InputEventMouseButton>() {
             if mouse_event.is_pressed() {
-                let p = mouse_event.get_position();
-                self.base_mut().set_position(p);
+                self.dot_position = mouse_event.get_position();
+                godot_print!("Dot moved to: {:?}", self.dot_position);
             }
         }
     }
 }
 
+fn figure() -> Vec<Vec<Vector2>> {
+    let d = dot();
+    let locations = vec![
+        Vector2::new(-12.0, 20.0),
+        Vector2::new(12.0, 20.0),
+        Vector2::new(-12.0, 0.0),
+        Vector2::new(12.0, 0.0),
+        Vector2::new(0.0, -20.0),
+        Vector2::new(-12.0, -40.0),
+        Vector2::new(12.0, -40.0),
+        Vector2::new(-32.0, -40.0),
+        Vector2::new(32.0, -40.0),
+        Vector2::new(0.0, -65.0),
+    ];
+
+    copy_figure_at(d, locations)
+}
+
+fn dot() -> Vec<Vector2> {
+    regular_polygon(24,10.0)
+}
 
 fn regular_polygon(sides: usize, radius: f32) -> Vec<Vector2> {
     let mut points = Vec::with_capacity(sides);

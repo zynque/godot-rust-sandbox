@@ -6,3 +6,5 @@
 .import/
 export.cfg
 export_credentials.cfg
+
+.vscode

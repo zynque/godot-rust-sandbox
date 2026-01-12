@@ -3,4 +3,3 @@
 [node name="Node2D" type="Node2D"]
 
 [node name="RustDrawing" type="RustDrawing" parent="."]
-position = Vector2(338, 207)
