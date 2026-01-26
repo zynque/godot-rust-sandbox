@@ -20,6 +20,7 @@ pub struct GodotPhysics{
 pub trait GodotPhysicsSpace {
   fn add_area_polygon(&self, polygon: &Vec<Vector2>, position: Vector2) -> Rid;
   fn polygon_collides(&mut self, polygon: &Vec<Vector2>, position: Vector2) -> bool;
+  fn would_collide_at(&mut self, polygon: &Vec<Vector2>, current_pos: Vector2, movement: Vector2) -> bool;
 }
 
 // fn world_space_physics() -> Result<GodotPhysics> {
@@ -72,5 +73,10 @@ impl GodotPhysicsSpace for GodotPhysics {
 
     let result = self.state_space.intersect_shape(&physics_query);
     !result.is_empty()
+  }
+
+  fn would_collide_at(&mut self, polygon: &Vec<Vector2>, current_pos: Vector2, movement: Vector2) -> bool {
+    let new_position = current_pos + movement;
+    self.polygon_collides(polygon, new_position)
   }
 }
