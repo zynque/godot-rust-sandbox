@@ -20,7 +20,14 @@ pub struct GodotPhysics{
 pub trait GodotPhysicsSpace {
   fn add_area_polygon(&self, polygon: &Vec<Vector2>, position: Vector2) -> Rid;
   fn polygon_collides(&mut self, polygon: &Vec<Vector2>, position: Vector2) -> bool;
-  fn would_collide_at(&mut self, polygon: &Vec<Vector2>, current_pos: Vector2, movement: Vector2) -> bool;
+  fn cast_motion(&mut self, polygon: &Vec<Vector2>, current_pos: Vector2, movement: Vector2) -> MoveResult;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MoveResult {
+  pub motion: Vector2,
+  pub remainder: Vector2,
+  pub collided: bool,
 }
 
 // fn world_space_physics() -> Result<GodotPhysics> {
@@ -75,8 +82,35 @@ impl GodotPhysicsSpace for GodotPhysics {
     !result.is_empty()
   }
 
-  fn would_collide_at(&mut self, polygon: &Vec<Vector2>, current_pos: Vector2, movement: Vector2) -> bool {
-    let new_position = current_pos + movement;
-    self.polygon_collides(polygon, new_position)
+  fn cast_motion(&mut self, polygon: &Vec<Vector2>, current_pos: Vector2, movement: Vector2) -> MoveResult {
+    let mut server = PhysicsServer2D::singleton();
+    let mut physics_query = PhysicsShapeQueryParameters2D::new_gd();
+    
+    let shape = server.convex_polygon_shape_create();
+    server.shape_set_data(shape, &Variant::from(PackedVector2Array::from(polygon.as_slice())));
+
+    let transform = Transform2D::IDENTITY.translated(current_pos);
+
+    physics_query.set_shape_rid(shape);
+    physics_query.set_transform(transform);
+    physics_query.set_motion(movement);
+    physics_query.set_collide_with_areas(true);
+    // TODO: Collision Mask
+
+    let result = self.state_space.cast_motion(&physics_query);
+    
+    // cast_motion returns an array with [safe_fraction, unsafe_fraction]
+    // safe_fraction tells us how far we can move before collision (0.0 to 1.0)
+    let safe_fraction = result.get(0).unwrap_or(1.0);
+    
+    let motion = movement * safe_fraction;
+    let remainder = movement * (1.0 - safe_fraction);
+    let collided = safe_fraction < 1.0;
+    
+    MoveResult {
+      motion,
+      remainder,
+      collided,
+    }
   }
 }

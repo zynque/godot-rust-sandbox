@@ -18,7 +18,7 @@ struct RustDrawing {
     left_pressed: bool,
     right_pressed: bool,
     velocity: Vector2,
-    physics: Option<GodotPhysics>,
+    physics: GodotPhysics,
     collision_areas: Vec<(Vec<Vector2>, Vector2)>, // (polygon, position) for rendering
     base: Base<Node2D>
 }
@@ -28,7 +28,8 @@ impl INode2D for RustDrawing {
     fn init(base: Base<Node2D>) -> Self {
         godot_print!("RustDrawing initialized");
 
-        let mut physics = new_physics_space().unwrap();
+        let mut physics = new_physics_space()
+            .expect("Failed to create physics space");
         let mut collision_areas = Vec::new();
 
         // Create floor as a wide rectangle at the bottom of the screen
@@ -71,7 +72,7 @@ impl INode2D for RustDrawing {
             left_pressed: false,
             right_pressed: false,
             velocity: Vector2::ZERO,
-            physics: Some(physics),
+            physics,
             collision_areas,
             base,
         }
@@ -114,25 +115,39 @@ impl INode2D for RustDrawing {
         self.velocity.y += gravity.y * delta;
 
         // Calculate movement based on velocity
-        let total_movement = self.velocity * delta;
+        let desired_movement = self.velocity * delta;
 
-        // Check collision before moving
-        if let Some(ref mut physics) = self.physics {
-            let figure_poly = dot(); // Check collision with the main figure shape
-            
-            if !physics.would_collide_at(&figure_poly, self.dot_position, total_movement) {
-                self.dot_position += total_movement;
-            } else {
-                // Hit something - stop falling
-                self.velocity.y = 0.0;
+        // Move as far as possible before collision
+        let figure_poly = dot();
+        let result = self.physics.cast_motion(&figure_poly, self.dot_position, desired_movement);
+        
+        // Apply the safe movement
+        self.dot_position += result.motion;
+        
+        // If we collided, try to slide along the surface
+        if result.collided && result.remainder.length_squared() > 0.01 {
+            // Try to slide along the collision surface
+            // If we hit floor/ceiling, allow horizontal movement
+            if result.remainder.y.abs() > result.remainder.x.abs() {
+                // Primarily vertical collision - try horizontal slide
+                let slide_movement = Vector2::new(result.remainder.x, 0.0);
+                let slide_result = self.physics.cast_motion(&figure_poly, self.dot_position, slide_movement);
+                self.dot_position += slide_result.motion;
                 
-                // Try horizontal movement only if there was any
-                if self.velocity.x != 0.0 {
-                    let horizontal_movement = Vector2::new(self.velocity.x * delta, 0.0);
-                    if !physics.would_collide_at(&figure_poly, self.dot_position, horizontal_movement) {
-                        self.dot_position += horizontal_movement;
-                    }
+                // Stop vertical velocity when hitting floor or ceiling
+                if self.velocity.y > 0.0 && result.remainder.y > 0.0 {
+                    self.velocity.y = 0.0;
+                } else if self.velocity.y < 0.0 && result.remainder.y < 0.0 {
+                    self.velocity.y = 0.0;
                 }
+            } else {
+                // Primarily horizontal collision - try vertical slide
+                let slide_movement = Vector2::new(0.0, result.remainder.y);
+                let slide_result = self.physics.cast_motion(&figure_poly, self.dot_position, slide_movement);
+                self.dot_position += slide_result.motion;
+                
+                // Stop horizontal velocity when hitting walls
+                self.velocity.x = 0.0;
             }
         }
 
