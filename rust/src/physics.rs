@@ -19,10 +19,12 @@ pub struct GodotPhysics{
 
 pub trait GodotPhysicsSpace {
   fn add_area_polygon(&self, polygon: &Vec<Vector2>, position: Vector2) -> Rid;
+  fn add_static_body_polygon(&mut self, polygon: &Vec<Vector2>, position: Vector2) -> Rid;
   fn polygon_collides(&mut self, polygon: &Vec<Vector2>, position: Vector2) -> bool;
   fn cast_motion(&mut self, polygon: &Vec<Vector2>, current_pos: Vector2, movement: Vector2) -> MoveResult;
   fn create_body(&mut self, polygon: &Vec<Vector2>, position: Vector2) -> Rid;
-  fn body_test_motion(&mut self, body_rid: Rid, movement: Vector2) -> BodyTestResult;
+  fn set_body_position(&mut self, body_rid: Rid, position: Vector2);
+  fn body_test_motion(&mut self, body_rid: Rid, from: Vector2, movement: Vector2) -> BodyTestResult;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -145,13 +147,35 @@ impl GodotPhysicsSpace for GodotPhysics {
     body_rid
   }
 
-  fn body_test_motion(&mut self, body_rid: Rid, movement: Vector2) -> BodyTestResult {
+  fn add_static_body_polygon(&mut self, polygon: &Vec<Vector2>, position: Vector2) -> Rid {
+    let mut server = PhysicsServer2D::singleton();
+    let body = server.body_create();
+    server.body_set_mode(body, BodyMode::STATIC);
+    server.body_set_space(body, self.space);
+
+    let shape = server.convex_polygon_shape_create();
+    server.shape_set_data(shape, &Variant::from(PackedVector2Array::from(polygon.as_slice())));
+    server.body_add_shape(body, shape);
+
+    let transform = Transform2D::IDENTITY.translated(position);
+    server.body_set_state(body, BodyState::TRANSFORM, &Variant::from(transform));
+
+    body
+  }
+
+  fn set_body_position(&mut self, body_rid: Rid, position: Vector2) {
+    let mut server = PhysicsServer2D::singleton();
+    let transform = Transform2D::IDENTITY.translated(position);
+    server.body_set_state(body_rid, BodyState::TRANSFORM, &Variant::from(transform));
+  }
+
+  fn body_test_motion(&mut self, body_rid: Rid, from: Vector2, movement: Vector2) -> BodyTestResult {
     let mut server = PhysicsServer2D::singleton();
 
-    let current_transform = server.body_get_state(body_rid, BodyState::TRANSFORM).to::<Transform2D>();
+    let transform = Transform2D::IDENTITY.translated(from);
 
     let mut parameters = PhysicsTestMotionParameters2D::new_gd();
-    parameters.set_from(current_transform);
+    parameters.set_from(transform);
     parameters.set_motion(movement);
 
     let result = PhysicsTestMotionResult2D::new_gd();

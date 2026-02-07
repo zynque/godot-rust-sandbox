@@ -18,7 +18,9 @@ struct RustDrawing {
     left_pressed: bool,
     right_pressed: bool,
     velocity: Vector2,
+    on_floor: bool,
     physics: GodotPhysics,
+    body_rid: Rid,
     collision_areas: Vec<(Vec<Vector2>, Vector2)>, // (polygon, position) for rendering
     base: Base<Node2D>
 }
@@ -40,7 +42,7 @@ impl INode2D for RustDrawing {
             Vector2::new(-500.0, 50.0),
         ];
         let floor_position = Vector2::new(320.0, 500.0);
-        physics.add_area_polygon(&floor_polygon, floor_position);
+        physics.add_static_body_polygon(&floor_polygon, floor_position);
         collision_areas.push((floor_polygon, floor_position));
 
         // Create left wall
@@ -51,7 +53,7 @@ impl INode2D for RustDrawing {
             Vector2::new(0.0, 600.0),
         ];
         let left_wall_position = Vector2::new(0.0, 0.0);
-        physics.add_area_polygon(&left_wall, left_wall_position);
+        physics.add_static_body_polygon(&left_wall, left_wall_position);
         collision_areas.push((left_wall, left_wall_position));
 
         // Create right wall
@@ -62,17 +64,22 @@ impl INode2D for RustDrawing {
             Vector2::new(0.0, 600.0),
         ];
         let right_wall_position = Vector2::new(590.0, 0.0);
-        physics.add_area_polygon(&right_wall, right_wall_position);
+        physics.add_static_body_polygon(&right_wall, right_wall_position);
         collision_areas.push((right_wall, right_wall_position));
 
         godot_print!("Floor and walls created");
 
+        let dot_position = Vector2::new(320.0, 100.0);
+        let body_rid = physics.create_body(&dot(), dot_position);
+
         Self {
-            dot_position: Vector2::new(320.0, 100.0), // Start above the floor
+            dot_position,
             left_pressed: false,
             right_pressed: false,
             velocity: Vector2::ZERO,
+            on_floor: false,
             physics,
+            body_rid,
             collision_areas,
             base,
         }
@@ -100,56 +107,98 @@ impl INode2D for RustDrawing {
     }   
 
     fn physics_process(&mut self, delta: f32) {
-        // Update horizontal velocity based on key states
-        let move_speed = 200.0; // pixels per second
-        if self.left_pressed && !self.right_pressed {
-            self.velocity.x = -move_speed;
+        // --- Constants (mirroring Godot's CharacterBody2D defaults) ---
+        const MAX_SLIDES: i32 = 6;
+        const FLOOR_MAX_ANGLE_COS: f32 = 0.70710678; // cos(45°)
+        const GRAVITY: f32 = 980.0;
+        const MOVE_SPEED: f32 = 200.0;
+        const FLOOR_SNAP_LENGTH: f32 = 4.0;
+
+        let up_direction = Vector2::UP;
+        let was_on_floor = self.on_floor;
+
+        // --- Build overall velocity vector from input + gravity ---
+        self.velocity.x = if self.left_pressed && !self.right_pressed {
+            -MOVE_SPEED
         } else if self.right_pressed && !self.left_pressed {
-            self.velocity.x = move_speed;
+            MOVE_SPEED
         } else {
-            self.velocity.x = 0.0;
-        }
+            0.0
+        };
 
-        // Apply gravity
-        let gravity = Vector2::new(0.0, 980.0); // pixels per second^2
-        self.velocity.y += gravity.y * delta;
+        self.velocity.y += GRAVITY * delta;
 
-        // Calculate movement based on velocity
-        let desired_movement = self.velocity * delta;
+        // Cap fall speed to avoid tunnelling through thin geometry
+        self.velocity.y = self.velocity.y.min(2000.0);
 
-        // Move as far as possible before collision
-        let figure_poly = dot();
-        let result = self.physics.cast_motion(&figure_poly, self.dot_position, desired_movement);
-        
-        // Apply the safe movement
-        self.dot_position += result.motion;
-        
-        // If we collided, try to slide along the surface
-        if result.collided && result.remainder.length_squared() > 0.01 {
-            // Try to slide along the collision surface
-            // If we hit floor/ceiling, allow horizontal movement
-            if result.remainder.y.abs() > result.remainder.x.abs() {
-                // Primarily vertical collision - try horizontal slide
-                let slide_movement = Vector2::new(result.remainder.x, 0.0);
-                let slide_result = self.physics.cast_motion(&figure_poly, self.dot_position, slide_movement);
-                self.dot_position += slide_result.motion;
-                
-                // Stop vertical velocity when hitting floor or ceiling
-                if self.velocity.y > 0.0 && result.remainder.y > 0.0 {
-                    self.velocity.y = 0.0;
-                } else if self.velocity.y < 0.0 && result.remainder.y < 0.0 {
-                    self.velocity.y = 0.0;
-                }
-            } else {
-                // Primarily horizontal collision - try vertical slide
-                let slide_movement = Vector2::new(0.0, result.remainder.y);
-                let slide_result = self.physics.cast_motion(&figure_poly, self.dot_position, slide_movement);
-                self.dot_position += slide_result.motion;
-                
-                // Stop horizontal velocity when hitting walls
-                self.velocity.x = 0.0;
+        // --- Move-and-slide loop (modelled on CharacterBody2D) ---
+        let mut motion = self.velocity * delta;
+        self.on_floor = false;
+
+        for _slide in 0..MAX_SLIDES {
+            if motion.length_squared() < 1e-6 {
+                break;
+            }
+
+            let result = self.physics.body_test_motion(
+                self.body_rid,
+                self.dot_position,
+                motion,
+            );
+
+            if !result.collided {
+                self.dot_position += motion;
+                break;
+            }
+
+            // Apply the safe portion of the motion
+            self.dot_position += result.travel;
+
+            let normal = result.collision_normal;
+
+            // Classify surface by comparing normal with up direction
+            if normal.dot(up_direction) > FLOOR_MAX_ANGLE_COS {
+                self.on_floor = true;
+            }
+
+            // Slide the remaining motion along the collision surface
+            //   slide(v, n) = v − (v · n) × n
+            motion = result.remainder
+                - normal * result.remainder.dot(normal);
+
+            // Slide velocity so it doesn't accumulate into the surface
+            let vel_into_surface = self.velocity.dot(normal);
+            if vel_into_surface < 0.0 {
+                self.velocity -= normal * vel_into_surface;
             }
         }
+
+        // Clamp near-zero velocity components to avoid drift
+        if self.velocity.x.abs() < 0.001 {
+            self.velocity.x = 0.0;
+        }
+        if self.velocity.y.abs() < 0.001 {
+            self.velocity.y = 0.0;
+        }
+
+        // --- Floor snap (keeps body grounded over small bumps / edges) ---
+        if was_on_floor && !self.on_floor && self.velocity.y >= 0.0 {
+            let snap_result = self.physics.body_test_motion(
+                self.body_rid,
+                self.dot_position,
+                Vector2::new(0.0, FLOOR_SNAP_LENGTH),
+            );
+            if snap_result.collided {
+                let snap_normal = snap_result.collision_normal;
+                if snap_normal.dot(up_direction) > FLOOR_MAX_ANGLE_COS {
+                    self.dot_position += snap_result.travel;
+                    self.on_floor = true;
+                }
+            }
+        }
+
+        // Sync the kinematic body's transform for the next frame
+        self.physics.set_body_position(self.body_rid, self.dot_position);
 
         self.base_mut().queue_redraw();
     }
@@ -168,15 +217,15 @@ impl INode2D for RustDrawing {
             self.right_pressed = false;
         }
         
-        if event.is_action_pressed("jump") {
-            // Apply upward impulse
-            self.velocity.y = -400.0; // Negative Y is upward in Godot
-            godot_print!("Jump!");
+        if event.is_action_pressed("jump") && self.on_floor {
+            self.velocity.y = -400.0;
         }
 
         if let Ok(mouse_event) = event.try_cast::<InputEventMouseButton>() {
             if mouse_event.is_pressed() {
                 self.dot_position = mouse_event.get_position();
+                self.velocity = Vector2::ZERO;
+                self.physics.set_body_position(self.body_rid, self.dot_position);
                 godot_print!("Dot moved to: {:?}", self.dot_position);
             }
         }
