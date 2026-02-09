@@ -2,9 +2,11 @@ use godot::prelude::*;
 use godot::classes::{InputEventMouseButton, InputEvent};
 use crate::point_vec_extensions::PointVecExtensions;
 use crate::physics::*;
+use crate::movement::{move_and_slide, MoveAndSlideParams};
 
 pub mod point_vec_extensions;
 pub mod physics;
+pub mod movement;
 struct GodotRustExtension;
 
 #[gdextension]
@@ -156,14 +158,9 @@ impl INode2D for RustDrawing {
     }   
 
     fn physics_process(&mut self, delta: f32) {
-        // --- Constants (mirroring Godot's CharacterBody2D defaults) ---
-        const MAX_SLIDES: i32 = 6;
-        const FLOOR_MAX_ANGLE_COS: f32 = 0.70710678; // cos(45°)
         const GRAVITY: f32 = 980.0;
         const MOVE_SPEED: f32 = 200.0;
-        const FLOOR_SNAP_LENGTH: f32 = 4.0;
 
-        let up_direction = Vector2::UP;
         let was_on_floor = self.on_floor;
 
         // --- Build overall velocity vector from input + gravity ---
@@ -180,73 +177,16 @@ impl INode2D for RustDrawing {
         // Cap fall speed to avoid tunnelling through thin geometry
         self.velocity.y = self.velocity.y.min(2000.0);
 
-        // --- Move-and-slide loop (modelled on CharacterBody2D) ---
-        let mut motion = self.velocity * delta;
-        self.on_floor = false;
-
-        for _slide in 0..MAX_SLIDES {
-            if motion.length_squared() < 1e-6 {
-                break;
-            }
-
-            let result = self.physics.body_test_motion(
-                self.body_rid,
-                self.dot_position,
-                motion,
-            );
-
-            if !result.collided {
-                // travel includes any overlap-recovery displacement,
-                // so always prefer it over raw motion.
-                self.dot_position += result.travel;
-                break;
-            }
-
-            // Apply the safe portion of the motion
-            self.dot_position += result.travel;
-
-            let normal = result.collision_normal;
-
-            // Classify surface by comparing normal with up direction
-            if normal.dot(up_direction) > FLOOR_MAX_ANGLE_COS {
-                self.on_floor = true;
-            }
-
-            // Slide the remaining motion along the collision surface
-            //   slide(v, n) = v − (v · n) × n
-            motion = result.remainder
-                - normal * result.remainder.dot(normal);
-
-            // Slide velocity so it doesn't accumulate into the surface
-            let vel_into_surface = self.velocity.dot(normal);
-            if vel_into_surface < 0.0 {
-                self.velocity -= normal * vel_into_surface;
-            }
-        }
-
-        // Clamp near-zero velocity components to avoid drift
-        if self.velocity.x.abs() < 0.001 {
-            self.velocity.x = 0.0;
-        }
-        if self.velocity.y.abs() < 0.001 {
-            self.velocity.y = 0.0;
-        }
-
-        // --- Floor snap (keeps body grounded over small bumps / edges) ---
-        if was_on_floor && !self.on_floor && self.velocity.y >= 0.0 {
-            let snap_result = self.physics.body_test_motion(
-                self.body_rid,
-                self.dot_position,
-                Vector2::new(0.0, FLOOR_SNAP_LENGTH),
-            );
-            if snap_result.collided {
-                let snap_normal = snap_result.collision_normal;
-                if snap_normal.dot(up_direction) > FLOOR_MAX_ANGLE_COS {
-                    self.dot_position += snap_result.travel;
-                    self.on_floor = true;
-                }
-            }
-        }
+        // --- Move-and-slide ---
+        self.on_floor = move_and_slide(
+            &mut self.physics,
+            self.body_rid,
+            &mut self.dot_position,
+            &mut self.velocity,
+            was_on_floor,
+            delta,
+            &MoveAndSlideParams::default(),
+        );
 
         // Sync the kinematic body's transform for the next frame
         self.physics.set_body_position(self.body_rid, self.dot_position);
