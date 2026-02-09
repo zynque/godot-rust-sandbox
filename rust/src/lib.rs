@@ -32,44 +32,93 @@ impl INode2D for RustDrawing {
 
         let mut physics = new_physics_space()
             .expect("Failed to create physics space");
-        let mut collision_areas = Vec::new();
+        let mut collision_areas: Vec<(Vec<Vector2>, Vector2)> = Vec::new();
 
-        // Create floor as a wide rectangle at the bottom of the screen
-        let floor_polygon = vec![
-            Vector2::new(-500.0, 0.0),
-            Vector2::new(500.0, 0.0),
-            Vector2::new(500.0, 50.0),
-            Vector2::new(-500.0, 50.0),
-        ];
-        let floor_position = Vector2::new(320.0, 500.0);
-        physics.add_static_body_polygon(&floor_polygon, floor_position);
-        collision_areas.push((floor_polygon, floor_position));
+        // Default Godot 4 viewport: 1152 × 648
+        const W: f32 = 1152.0;
+        const H: f32 = 648.0;
+        const WALL: f32 = 20.0;
+        let floor_y = H - WALL; // 628  — top of the floor surface
 
-        // Create left wall
-        let left_wall = vec![
-            Vector2::new(0.0, 0.0),
-            Vector2::new(50.0, 0.0),
-            Vector2::new(50.0, 600.0),
-            Vector2::new(0.0, 600.0),
-        ];
-        let left_wall_position = Vector2::new(0.0, 0.0);
-        physics.add_static_body_polygon(&left_wall, left_wall_position);
-        collision_areas.push((left_wall, left_wall_position));
+        // Helper: register a static body and remember it for drawing
+        let add = |physics: &mut GodotPhysics,
+                       areas: &mut Vec<(Vec<Vector2>, Vector2)>,
+                       poly: Vec<Vector2>,
+                       pos: Vector2| {
+            physics.add_static_body_polygon(&poly, pos);
+            areas.push((poly, pos));
+        };
 
-        // Create right wall
-        let right_wall = vec![
-            Vector2::new(0.0, 0.0),
-            Vector2::new(50.0, 0.0),
-            Vector2::new(50.0, 600.0),
-            Vector2::new(0.0, 600.0),
-        ];
-        let right_wall_position = Vector2::new(590.0, 0.0);
-        physics.add_static_body_polygon(&right_wall, right_wall_position);
-        collision_areas.push((right_wall, right_wall_position));
+        // --- Floor (full-width, 20 px thick at the very bottom) ---
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, 0.0), Vector2::new(W, 0.0),
+                 Vector2::new(W, WALL),  Vector2::new(0.0, WALL)],
+            Vector2::new(0.0, floor_y));
 
-        godot_print!("Floor and walls created");
+        // --- Left wall (full-height, flush with left edge) ---
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, 0.0), Vector2::new(WALL, 0.0),
+                 Vector2::new(WALL, H),  Vector2::new(0.0, H)],
+            Vector2::ZERO);
 
-        let dot_position = Vector2::new(320.0, 100.0);
+        // --- Right wall (full-height, flush with right edge) ---
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, 0.0), Vector2::new(WALL, 0.0),
+                 Vector2::new(WALL, H),  Vector2::new(0.0, H)],
+            Vector2::new(W - WALL, 0.0));
+
+        // ===== Obstacles (all y-values relative to floor_y) =====
+
+        // 1) Three ascending steps (25 / 50 / 80 px tall)
+        //    Bottom extends WALL-deep into the floor to eliminate seam gaps.
+        for (i, h) in [25.0_f32, 50.0, 80.0].iter().enumerate() {
+            let x = 120.0 + i as f32 * 70.0;
+            add(&mut physics, &mut collision_areas,
+                vec![Vector2::new(0.0, WALL), Vector2::new(60.0, WALL),
+                     Vector2::new(60.0, -*h), Vector2::new(0.0, -*h)],
+                Vector2::new(x, floor_y));
+        }
+
+        // 2) Gentle ramp ~15° (200 wide × 55 tall, going up left→right)
+        //    Quad with base WALL-deep so only the slope is exposed above floor.
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, WALL), Vector2::new(200.0, WALL),
+                 Vector2::new(200.0, -55.0), Vector2::new(0.0, 2.0)],
+            Vector2::new(380.0, floor_y));
+
+        // 3) Small platform on top of the gentle ramp
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, 10.0), Vector2::new(80.0, 10.0),
+                 Vector2::new(80.0, -15.0), Vector2::new(0.0, -15.0)],
+            Vector2::new(580.0, floor_y - 55.0));
+
+        // 4) 45° ramp (80 × 80, going up left→right)
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, WALL), Vector2::new(80.0, WALL),
+                 Vector2::new(80.0, -80.0), Vector2::new(0.0, 2.0)],
+            Vector2::new(700.0, floor_y));
+
+        // 5) Steep ramp ~60° (50 wide × 87 tall, going up left→right)
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, WALL), Vector2::new(50.0, WALL),
+                 Vector2::new(50.0, -87.0), Vector2::new(0.0, 2.0)],
+            Vector2::new(820.0, floor_y));
+
+        // 6) Down-ramp ~18° (going DOWN left→right, 150 wide × 50 tall)
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, WALL), Vector2::new(150.0, WALL),
+                 Vector2::new(150.0, 2.0), Vector2::new(0.0, -50.0)],
+            Vector2::new(920.0, floor_y));
+
+        // 7) Floating platform (upper area, for jump testing)
+        add(&mut physics, &mut collision_areas,
+            vec![Vector2::new(0.0, 0.0), Vector2::new(140.0, 0.0),
+                 Vector2::new(140.0, 15.0), Vector2::new(0.0, 15.0)],
+            Vector2::new(500.0, 380.0));
+
+        godot_print!("Level geometry created ({} bodies)", collision_areas.len());
+
+        let dot_position = Vector2::new(100.0, 100.0);
         let body_rid = physics.create_body(&dot(), dot_position);
 
         Self {
@@ -147,7 +196,9 @@ impl INode2D for RustDrawing {
             );
 
             if !result.collided {
-                self.dot_position += motion;
+                // travel includes any overlap-recovery displacement,
+                // so always prefer it over raw motion.
+                self.dot_position += result.travel;
                 break;
             }
 
@@ -235,16 +286,7 @@ impl INode2D for RustDrawing {
 fn figure() -> Vec<Vec<Vector2>> {
     let d = dot();
     let locations = vec![
-        Vector2::new(-12.0, 20.0),
-        Vector2::new(12.0, 20.0),
-        Vector2::new(-12.0, 0.0),
-        Vector2::new(12.0, 0.0),
-        Vector2::new(0.0, -20.0),
-        Vector2::new(-12.0, -40.0),
-        Vector2::new(12.0, -40.0),
-        Vector2::new(-32.0, -40.0),
-        Vector2::new(32.0, -40.0),
-        Vector2::new(0.0, -65.0),
+        Vector2::new(0.0, 0.0),
     ];
 
     copy_figure_at(d, locations)

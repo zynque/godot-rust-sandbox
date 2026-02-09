@@ -42,6 +42,7 @@ pub struct BodyTestResult {
   pub safe_fraction: f32,
   pub collision_point: Vector2,
   pub collision_normal: Vector2,
+  pub collision_depth: f32,
   pub collider_rid: Rid,
 }
 
@@ -177,6 +178,7 @@ impl GodotPhysicsSpace for GodotPhysics {
     let mut parameters = PhysicsTestMotionParameters2D::new_gd();
     parameters.set_from(transform);
     parameters.set_motion(movement);
+    parameters.set_recovery_as_collision_enabled(true);
 
     let result = PhysicsTestMotionResult2D::new_gd();
 
@@ -189,6 +191,7 @@ impl GodotPhysicsSpace for GodotPhysics {
       safe_fraction: result.get_collision_safe_fraction(),
       collision_point: result.get_collision_point(),
       collision_normal: result.get_collision_normal(),
+      collision_depth: result.get_collision_depth(),
       collider_rid: result.get_collider_rid(),
     }
   }
