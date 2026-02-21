@@ -3,10 +3,12 @@ use godot::classes::{InputEventMouseButton, InputEvent};
 use crate::point_vec_extensions::PointVecExtensions;
 use crate::physics::*;
 use crate::movement::{move_and_slide, MoveAndSlideParams};
+use crate::bindless_rendering::GpuDot;
 
 pub mod point_vec_extensions;
 pub mod physics;
 pub mod movement;
+pub mod bindless_rendering;
 struct GodotRustExtension;
 
 #[gdextension]
@@ -24,6 +26,7 @@ struct RustDrawing {
     physics: GodotPhysics,
     body_rid: Rid,
     collision_areas: Vec<(Vec<Vector2>, Vector2)>, // (polygon, position) for rendering
+    gpu_dots: Vec<GpuDot>,
     base: Base<Node2D>
 }
 
@@ -132,11 +135,25 @@ impl INode2D for RustDrawing {
             physics,
             body_rid,
             collision_areas,
+            gpu_dots: Vec::new(), // populated in ready()
             base,
         }
     }
 
+    fn ready(&mut self) {
+        self.gpu_dots = crate::bindless_rendering::compute_background_dots(512);
+    }
+
     fn draw(&mut self) {
+        // Draw GPU-computed background dots (bindless rendering test)
+        let dots: Vec<(Vector2, f32, Color)> = self.gpu_dots
+            .iter()
+            .map(|d| (d.position, d.radius, d.color))
+            .collect();
+        for (pos, radius, color) in dots {
+            self.base_mut().draw_circle(pos, radius, color);
+        }
+
         // Draw collision areas (floor and walls)
         let wall_color = Color::from_rgba(0.5, 0.5, 0.5, 1.0);
         let wall_polygons: Vec<PackedVector2Array> = self.collision_areas
