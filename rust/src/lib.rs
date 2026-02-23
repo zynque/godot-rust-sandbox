@@ -9,6 +9,7 @@ pub mod physics;
 pub mod movement;
 pub mod bindless_rendering;
 pub mod figures;
+pub mod lsystem;
 use crate::figures::*;
 struct GodotRustExtension;
 
@@ -68,6 +69,14 @@ impl INode2D for RustDrawing {
         let d = dot();
         let points = PackedVector2Array::from(d);
         self.base_mut().draw_colored_polygon(&points, color);
+
+        // Draw L-system: one rectangle per Forward segment (2 iterations, 20 px step, 4 px thick)
+        let segments = lsystem::lsystem_segments(2, 10.0, 4.0, Vector2::new(400.0, 300.0));
+        let ls_color = Color::from_rgba(0.4, 0.6, 0.9, 0.85);
+        for rect in segments {
+            let packed = PackedVector2Array::from(rect.as_slice());
+            self.base_mut().draw_colored_polygon(&packed, ls_color);
+        }
     }   
 
     fn input(&mut self, event: Gd<InputEvent>) {
