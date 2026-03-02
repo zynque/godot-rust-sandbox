@@ -12,33 +12,52 @@ pub enum Op {
 }
 
 /// The seed / axiom: FLFRFRFFLFLFRF
-pub const AXIOM: &[Op] = &[
-    Op::Forward,
-    Op::TurnLeft,
-    Op::Forward,
-    Op::TurnRight,
-    Op::Forward,
-    Op::TurnRight,
-    Op::Forward,
-    Op::Forward,
-    Op::TurnLeft,
-    Op::Forward,
-    Op::TurnLeft,
-    Op::Forward,
-    Op::TurnRight,
-    Op::Forward,
-];
+pub fn build_axiom() -> Vec<Op> {
+    SeedBuilder::new()
+        .f().l().f().r().f().r().f().f().l().f().l().f().r().f()
+        .build()
+}
+
+pub struct SeedBuilder {
+    pub seed: Vec<Op>,
+}
+
+impl SeedBuilder {
+    fn new() -> Self {
+        Self { seed: Vec::new() }
+    }
+
+    fn build(&self) -> Vec<Op> {
+        self.seed.clone()
+    }
+
+    fn f(mut self) -> Self {
+        self.seed.push(Op::Forward);
+        self
+    }
+
+    fn l(mut self) -> Self {
+        self.seed.push(Op::TurnLeft);
+        self
+    }
+
+    fn r(mut self) -> Self {
+        self.seed.push(Op::TurnRight);
+        self
+    }
+}
 
 /// Apply the production rule `F → AXIOM` the given number of times.
 /// `L` and `R` are terminals and are passed through unchanged.
-pub fn expand(iterations: usize) -> Vec<Op> {
-    let mut current: Vec<Op> = AXIOM.to_vec();
+pub fn expand(seed: Vec<Op>, iterations: usize) -> Vec<Op> {
+    let original_length = seed.len();
+    let mut current = seed.clone();
 
     for _ in 0..iterations {
-        let mut next: Vec<Op> = Vec::with_capacity(current.len() * AXIOM.len());
+        let mut next: Vec<Op> = Vec::with_capacity(current.len() * original_length);
         for op in &current {
             match op {
-                Op::Forward => next.extend_from_slice(AXIOM),
+                Op::Forward => next.extend_from_slice(&seed),
                 Op::TurnLeft => next.push(Op::TurnLeft),
                 Op::TurnRight => next.push(Op::TurnRight),
             }
@@ -113,7 +132,7 @@ pub fn lsystem_segments(
     thickness: f32,
     origin: Vector2,
 ) -> Vec<[Vector2; 4]> {
-    let ops = expand(iterations);
+    let ops = expand(build_axiom(), iterations);
     let mut rects = segment_rectangles(&ops, length, thickness);
     let centre = bounding_centre(&rects);
     let offset = origin - centre;
@@ -124,3 +143,11 @@ pub fn lsystem_segments(
     }
     rects
 }
+
+struct GrowthSegment<T> {
+    pub value: T,
+    pub branches: Vec<GrowthSegment<T>>,
+    pub continuation: Option<Box<GrowthSegment<T>>>,
+}
+
+type growth_function<T> = fn(node: GrowthSegment<T>) -> GrowthSegment<T>;
