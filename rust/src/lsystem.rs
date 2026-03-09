@@ -1,3 +1,5 @@
+use std::f32::consts::TAU;
+
 use godot::prelude::*;
 
 /// Symbols in the L-system alphabet.
@@ -11,53 +13,59 @@ pub enum Op {
     TurnRight,
 }
 
+pub struct Seed {
+    pub angle: f32,
+    pub ops: Vec<Op>,
+}
+
 /// The seed / axiom: FLFRFRFFLFLFRF
-pub fn build_axiom() -> Vec<Op> {
-    SeedBuilder::new()
+pub fn build_axiom() -> Seed {
+    SeedBuilder::new(0.21)
         .f().l().f().r().f().r().f().f().l().f().l().f().r().f()
         .build()
 }
 
 pub struct SeedBuilder {
-    pub seed: Vec<Op>,
+    pub angle: f32,
+    pub ops: Vec<Op>,
 }
 
 impl SeedBuilder {
-    fn new() -> Self {
-        Self { seed: Vec::new() }
+    fn new(angle: f32) -> Self {
+        Self { angle, ops: Vec::new() }
     }
 
-    fn build(&self) -> Vec<Op> {
-        self.seed.clone()
+    fn build(&self) -> Seed {
+        Seed{ angle: self.angle, ops: self.ops.clone() }
     }
 
     fn f(mut self) -> Self {
-        self.seed.push(Op::Forward);
+        self.ops.push(Op::Forward);
         self
     }
 
     fn l(mut self) -> Self {
-        self.seed.push(Op::TurnLeft);
+        self.ops.push(Op::TurnLeft);
         self
     }
 
     fn r(mut self) -> Self {
-        self.seed.push(Op::TurnRight);
+        self.ops.push(Op::TurnRight);
         self
     }
 }
 
 /// Apply the production rule `F → AXIOM` the given number of times.
 /// `L` and `R` are terminals and are passed through unchanged.
-pub fn expand(seed: Vec<Op>, iterations: usize) -> Vec<Op> {
-    let original_length = seed.len();
-    let mut current = seed.clone();
+pub fn expand(seed: Seed, iterations: usize) -> Seed {
+    let original_length = seed.ops.len();
+    let mut current = seed.ops.clone();
 
     for _ in 0..iterations {
         let mut next: Vec<Op> = Vec::with_capacity(current.len() * original_length);
         for op in &current {
             match op {
-                Op::Forward => next.extend_from_slice(&seed),
+                Op::Forward => next.extend_from_slice(&seed.ops),
                 Op::TurnLeft => next.push(Op::TurnLeft),
                 Op::TurnRight => next.push(Op::TurnRight),
             }
@@ -65,14 +73,14 @@ pub fn expand(seed: Vec<Op>, iterations: usize) -> Vec<Op> {
         current = next;
     }
 
-    current
+    Seed { angle: seed.angle, ops: current }
 }
 
 /// Walk the op sequence with a turtle, returning one rectangle (4 corners,
 /// clockwise) for every `Forward` step.
 /// `length` is the length of each segment; `thickness` is the stroke width.
 /// The turtle starts at (0, 0) facing right (+X).
-pub fn segment_rectangles(ops: &[Op], length: f32, thickness: f32) -> Vec<[Vector2; 4]> {
+pub fn segment_rectangles(angle: f32, ops: &[Op], length: f32, thickness: f32) -> Vec<[Vector2; 4]> {
     let mut pos = Vector2::ZERO;
     let mut dir = Vector2::new(1.0, 0.0);
     let half = thickness * 0.5;
@@ -95,10 +103,10 @@ pub fn segment_rectangles(ops: &[Op], length: f32, thickness: f32) -> Vec<[Vecto
                 pos = next;
             }
             Op::TurnLeft => {
-                dir = Vector2::new(dir.y, -dir.x);
+                dir = dir.rotated(-TAU * angle);
             }
             Op::TurnRight => {
-                dir = Vector2::new(-dir.y, dir.x);
+                dir = dir.rotated(TAU * angle);
             }
         }
     }
@@ -132,8 +140,8 @@ pub fn lsystem_segments(
     thickness: f32,
     origin: Vector2,
 ) -> Vec<[Vector2; 4]> {
-    let ops = expand(build_axiom(), iterations);
-    let mut rects = segment_rectangles(&ops, length, thickness);
+    let seed = expand(build_axiom(), iterations);
+    let mut rects = segment_rectangles(seed.angle, &seed.ops, length, thickness);
     let centre = bounding_centre(&rects);
     let offset = origin - centre;
     for rect in &mut rects {
