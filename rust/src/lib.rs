@@ -1,8 +1,9 @@
 use godot::prelude::*;
-use godot::classes::{InputEventMouseButton, InputEvent};
+use godot::classes::InputEvent;
 use crate::point_vec_extensions::PointVecExtensions;
 use crate::physics::*;
 use crate::bindless_rendering::GpuDot;
+use crate::input_state::{handle_input, InputState};
 
 pub mod point_vec_extensions;
 pub mod physics;
@@ -10,6 +11,7 @@ pub mod movement;
 pub mod bindless_rendering;
 pub mod figures;
 pub mod lsystem;
+pub mod input_state;
 use crate::figures::*;
 struct GodotRustExtension;
 
@@ -20,11 +22,7 @@ unsafe impl ExtensionLibrary for GodotRustExtension {}
 #[class(base=Node2D)]
 struct RustDrawing {
     #[base]
-    left_pressed: bool,
-    right_pressed: bool,
-    jump_pressed: bool,
-    mouse_pressed: bool,
-    mouse_position: Vector2,
+    input_state: InputState,
     physics: GodotPhysics,
     gpu_dots: Vec<GpuDot>,
     base: Base<Node2D>
@@ -39,11 +37,7 @@ impl INode2D for RustDrawing {
             .expect("Failed to create physics space");
 
         Self {
-            left_pressed: false,
-            right_pressed: false,
-            jump_pressed: false,
-            mouse_pressed: false,
-            mouse_position: Vector2::ZERO,
+            input_state: InputState::default(),
             physics,
             gpu_dots: Vec::new(), // populated in ready()
             base,
@@ -80,33 +74,7 @@ impl INode2D for RustDrawing {
     }   
 
     fn input(&mut self, event: Gd<InputEvent>) {
-        if event.is_action_pressed("move_left") {
-            self.left_pressed = true;
-        }
-        if event.is_action_pressed("move_right") {
-            self.right_pressed = true;
-        }
-        if event.is_action_released("move_left") {
-            self.left_pressed = false;
-        }
-        if event.is_action_released("move_right") {
-            self.right_pressed = false;
-        }
-        if event.is_action_pressed("jump") {
-            self.jump_pressed = true;
-        }
-        if event.is_action_released("jump") {
-            self.jump_pressed = false;
-        }
-
-        if let Ok(mouse_event) = event.try_cast::<InputEventMouseButton>() {
-            if mouse_event.is_pressed() {
-                self.mouse_pressed = true;
-                self.mouse_position = mouse_event.get_position();
-            } else {
-                self.mouse_pressed = false;
-            }
-        }
+        handle_input(event, &mut self.input_state);
     }
 }
 
