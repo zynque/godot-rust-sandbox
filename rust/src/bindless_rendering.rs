@@ -1,51 +1,32 @@
-use godot::prelude::*;
+﻿use godot::prelude::*;
 use godot::classes::{RenderingServer, RdShaderSource, RdUniform};
 use godot::classes::rendering_device::{ShaderStage, UniformType};
-
-/// GLSL compute shader compiled at runtime — no file loading needed.
-/// Generates scattered 2D dots with procedural colours across the viewport.
-const COMPUTE_GLSL: &str = r"
-#version 450
-
-layout(set = 0, binding = 0, std430) restrict buffer InstanceData {
-    vec4 positions[];   // xy = screen pos, z = radius, w = unused
-} instance_data;
-
-layout(set = 0, binding = 1, std430) restrict buffer ColorData {
-    vec4 colors[];
-} color_data;
-
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
-
-float hash(float n) {
-    return fract(sin(n) * 43758.5453123);
-}
-
-void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    float fi = float(idx);
-
-    // Scatter dots across the default viewport (1152 × 648)
-    float x = hash(fi * 1.1) * 1152.0;
-    float y = hash(fi * 2.3) * 648.0;
-    float r = 2.0 + hash(fi * 3.7) * 6.0;
-
-    instance_data.positions[idx] = vec4(x, y, r, 0.0);
-
-    // Blue-purple background palette
-    float cr = 0.05 + hash(fi * 4.1) * 0.25;
-    float cg = 0.05 + hash(fi * 5.3) * 0.30;
-    float cb = 0.20 + hash(fi * 6.7) * 0.50;
-
-    color_data.colors[idx] = vec4(cr, cg, cb, 0.7);
-}
-";
+use godot::classes::FileAccess;
 
 /// A single dot produced by the GPU compute shader.
 pub struct GpuDot {
     pub position: Vector2,
     pub radius: f32,
     pub color: Color,
+}
+
+/// Load compute shader from bindless_compute.gdshader, stripping the #[compute] directive.
+/// Returns the GLSL source or None if the file cannot be read.
+fn load_shader_source() -> Option<String> {
+    let path = GString::from("res://bindless_compute.gdshader");
+    let file = FileAccess::open(&path, godot::classes::file_access::ModeFlags::READ)?;
+    
+    let content_gstring = file.get_as_text();
+    let content = String::from(content_gstring);
+    
+    // Strip the optional #[compute] directive at the start (Godot shader annotation)
+    let glsl: String = content
+        .split('\n')
+        .skip_while(|line| line.trim().starts_with("#[compute]"))
+        .collect::<Vec<&str>>()
+        .join("\n");
+    
+    Some(glsl)
 }
 
 /// Run a one-shot compute shader that generates background dots.
@@ -59,9 +40,14 @@ pub fn compute_background_dots(count: u32) -> Vec<GpuDot> {
         return Vec::new();
     };
 
-    // --- 2. Compile GLSL → SPIR-V at runtime ---
+    // --- 2. Load and compile GLSL → SPIR-V at runtime ---
+    let Some(glsl_source) = load_shader_source() else {
+        godot_error!("Bindless: failed to load shader from res://bindless_compute.gdshader");
+        return Vec::new();
+    };
+
     let mut source = RdShaderSource::new_gd();
-    source.set_stage_source(ShaderStage::COMPUTE, COMPUTE_GLSL);
+    source.set_stage_source(ShaderStage::COMPUTE, &GString::from(glsl_source.as_str()));
 
     let Some(spirv) = rd.shader_compile_spirv_from_source(&source) else {
         godot_error!("Bindless: shader_compile_spirv_from_source returned None");
