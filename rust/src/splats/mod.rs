@@ -10,6 +10,8 @@ mod uniform;
 mod dispatch;
 mod display;
 
+use self::dispatch::dispatch_compute_raw;
+
 #[derive(GodotClass)]
 #[class(base=Node)]
 struct SplatViewer {
@@ -41,7 +43,8 @@ impl INode for SplatViewer {
     }
 
     fn ready(&mut self) {
-        self.rd = RenderingServer::singleton().create_local_rendering_device();
+        self.rd = RenderingServer::singleton().get_rendering_device();
+        self.base_mut().set_process(true);
 
         let visible_rect = self.base().get_viewport()
           .map(|vp| vp.get_visible_rect().size)
@@ -58,7 +61,35 @@ impl INode for SplatViewer {
             self.display_result();
             self.rd = Some(rd);
         } else {
-            godot_warn!("SplatViewer: failed to create local RenderingDevice in ready(); compute output disabled.");
+            godot_warn!("SplatViewer: failed to get main RenderingDevice in ready(); zero-copy display unavailable.");
         }
+    }
+
+    fn process(&mut self, _delta: f64) {
+        if self.rd.is_none() {
+            return;
+        }
+
+        let pipeline_rid = self.pipeline_rid;
+        let uniform_set_rid = self.uniform_set_rid;
+        let width = self.width;
+        let height = self.height;
+
+        let callable = Callable::from_local_fn("splat_render_thread_dispatch", move |_| {
+            if let Some(mut rd) = RenderingServer::singleton().get_rendering_device() {
+                dispatch_compute_raw(
+                    &mut rd,
+                    pipeline_rid,
+                    uniform_set_rid,
+                    width,
+                    height,
+                );
+            }
+
+            Ok(Variant::nil())
+        });
+
+        let mut rs = RenderingServer::singleton();
+        rs.call_on_render_thread(&callable);
     }
 }

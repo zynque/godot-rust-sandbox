@@ -2,24 +2,36 @@ use godot::prelude::*;
 use godot::classes::RenderingDevice;
 use super::SplatViewer;
 
+pub fn dispatch_compute_raw(
+    rd: &mut Gd<RenderingDevice>,
+    pipeline_rid: Rid,
+    uniform_set_rid: Rid,
+    width: u32,
+    height: u32,
+) {
+    let compute_list = rd.compute_list_begin();
+
+    rd.compute_list_bind_compute_pipeline(compute_list, pipeline_rid);
+    rd.compute_list_bind_uniform_set(compute_list, uniform_set_rid, 0);
+
+    rd.compute_list_dispatch(
+        compute_list,
+        width / 8,
+        height / 8,
+        1,
+    );
+
+    rd.compute_list_end();
+}
+
 impl SplatViewer {
-  pub fn dispatch_compute(&self, rd: &mut Gd<RenderingDevice>) {
-        let compute_list = rd.compute_list_begin();
-
-        rd.compute_list_bind_compute_pipeline(compute_list, self.pipeline_rid);
-        rd.compute_list_bind_uniform_set(compute_list, self.uniform_set_rid, 0);
-
-        rd.compute_list_dispatch(
-            compute_list,
-            (self.width / 8) as u32,
-            (self.height / 8) as u32,
-            1,
+    pub fn dispatch_compute(&self, rd: &mut Gd<RenderingDevice>) {
+        dispatch_compute_raw(
+            rd,
+            self.pipeline_rid,
+            self.uniform_set_rid,
+            self.width,
+            self.height,
         );
-
-        rd.compute_list_end();
-        rd.submit();
-
-        // For debugging only — remove later
-        rd.sync();
-    } 
+    }
 }
