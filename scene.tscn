@@ -2,4 +2,7 @@
 
 [node name="Node2D" type="Node2D"]
 
-[node name="RustDrawing" type="RustDrawing" parent="."]
+[node name="RustDrawing" type="Node2D" parent="."]
+visible = false
+
+[node name="SplatViewer" type="SplatViewer" parent="."]

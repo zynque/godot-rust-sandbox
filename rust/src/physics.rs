@@ -1,4 +1,3 @@
-use godot::classes::{PhysicsTestMotionParameters2D, PhysicsTestMotionResult2D};
 use godot::prelude::*;
 use godot::builtin::{
   Rid
@@ -8,7 +7,9 @@ use godot::classes::{
     PhysicsDirectSpaceState2D,
     PhysicsShapeQueryParameters2D,
     physics_server_2d::BodyMode,
-    physics_server_2d::BodyState
+    physics_server_2d::BodyState,
+    PhysicsTestMotionParameters2D,
+    PhysicsTestMotionResult2D
 };
 
 pub struct GodotPhysics{
