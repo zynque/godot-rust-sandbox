@@ -4,6 +4,8 @@ use godot::classes::{
     RenderingDevice,
 };
 
+mod gpu_splat_data;
+
 mod texture;
 mod pipeline;
 mod uniform;

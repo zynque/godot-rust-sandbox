@@ -5,6 +5,7 @@ pub mod lsystem;
 pub mod input_state;
 pub mod lsystem_viewer;
 pub mod splats;
+pub mod segments;
 
 struct GodotRustExtension;
 
