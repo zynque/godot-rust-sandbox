@@ -16,8 +16,8 @@ pub fn dispatch_compute_raw(
 
     rd.compute_list_dispatch(
         compute_list,
-        width / 8,
-        height / 8,
+        (width + 7) / 8,
+        (height + 7) / 8,
         1,
     );
 

@@ -21,6 +21,7 @@ struct SplatViewer {
 
     rd: Option<Gd<RenderingDevice>>,
     texture_rid: Rid,
+    splat_buffer_rid: Rid,
     uniform_set_rid: Rid,
     shader_rid: Rid,
     pipeline_rid: Rid,
@@ -36,6 +37,7 @@ impl INode for SplatViewer {
             base,
             rd: None,
             texture_rid: Rid::Invalid,
+            splat_buffer_rid: Rid::Invalid,
             uniform_set_rid: Rid::Invalid,
             shader_rid: Rid::Invalid,
             pipeline_rid: Rid::Invalid,
@@ -58,6 +60,7 @@ impl INode for SplatViewer {
         if let Some(mut rd) = self.rd.take() {
             self.create_texture(&mut rd);
             self.create_pipeline(&mut rd);
+            self.create_splat_buffer(&mut rd);
             self.create_uniform_set(&mut rd);
             self.dispatch_compute(&mut rd);
             self.display_result();
