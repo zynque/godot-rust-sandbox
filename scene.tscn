@@ -3,3 +3,6 @@
 [node name="Node2D" type="Node2D"]
 
 [node name="SplatViewer" type="SplatViewer" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.962231, -0.0599183, 0.265558, 0.0158945, 0.986179, 0.16492, -0.271769, -0.154471, 0.949884, 0.705073, 0.660478, 2.10112)

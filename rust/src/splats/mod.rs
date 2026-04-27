@@ -13,6 +13,7 @@ mod dispatch;
 mod display;
 
 use self::dispatch::dispatch_compute_raw;
+use self::uniform::{camera_uniform_bytes, update_camera_buffer_raw};
 
 #[derive(GodotClass)]
 #[class(base=Node)]
@@ -22,6 +23,7 @@ struct SplatViewer {
     rd: Option<Gd<RenderingDevice>>,
     texture_rid: Rid,
     splat_buffer_rid: Rid,
+    camera_buffer_rid: Rid,
     uniform_set_rid: Rid,
     shader_rid: Rid,
     pipeline_rid: Rid,
@@ -38,6 +40,7 @@ impl INode for SplatViewer {
             rd: None,
             texture_rid: Rid::Invalid,
             splat_buffer_rid: Rid::Invalid,
+            camera_buffer_rid: Rid::Invalid,
             uniform_set_rid: Rid::Invalid,
             shader_rid: Rid::Invalid,
             pipeline_rid: Rid::Invalid,
@@ -61,7 +64,33 @@ impl INode for SplatViewer {
             self.create_texture(&mut rd);
             self.create_pipeline(&mut rd);
             self.create_splat_buffer(&mut rd);
+            self.create_camera_buffer(&mut rd);
             self.create_uniform_set(&mut rd);
+
+            let camera_data = self.base().get_viewport()
+                .map(|vp| {
+                    vp.get_camera_3d()
+                        .map(|camera| {
+                            camera_uniform_bytes(
+                                camera.get_camera_transform(),
+                                camera.get_camera_projection(),
+                            )
+                        })
+                        .unwrap_or_else(|| {
+                            camera_uniform_bytes(
+                                Transform3D::IDENTITY,
+                                Projection::IDENTITY,
+                            )
+                        })
+                })
+                .unwrap_or_else(|| {
+                    camera_uniform_bytes(
+                        Transform3D::IDENTITY,
+                        Projection::IDENTITY,
+                    )
+                });
+            update_camera_buffer_raw(&mut rd, self.camera_buffer_rid, &camera_data);
+
             self.dispatch_compute(&mut rd);
             self.display_result();
             self.rd = Some(rd);
@@ -77,11 +106,36 @@ impl INode for SplatViewer {
 
         let pipeline_rid = self.pipeline_rid;
         let uniform_set_rid = self.uniform_set_rid;
+        let camera_buffer_rid = self.camera_buffer_rid;
         let width = self.width;
         let height = self.height;
 
+        let camera_data = self.base().get_viewport()
+            .map(|vp| {
+                vp.get_camera_3d()
+                    .map(|camera| {
+                        camera_uniform_bytes(
+                            camera.get_camera_transform(),
+                            camera.get_camera_projection(),
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        camera_uniform_bytes(
+                            Transform3D::IDENTITY,
+                            Projection::IDENTITY,
+                        )
+                    })
+            })
+            .unwrap_or_else(|| {
+                camera_uniform_bytes(
+                    Transform3D::IDENTITY,
+                    Projection::IDENTITY,
+                )
+            });
+
         let callable = Callable::from_local_fn("splat_render_thread_dispatch", move |_| {
             if let Some(mut rd) = RenderingServer::singleton().get_rendering_device() {
+                update_camera_buffer_raw(&mut rd, camera_buffer_rid, &camera_data);
                 dispatch_compute_raw(
                     &mut rd,
                     pipeline_rid,

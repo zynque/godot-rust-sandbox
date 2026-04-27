@@ -1,7 +1,5 @@
 use godot::builtin::Vector3;
 
-use crate::segments::Segments;
-
 #[repr(C)]
 pub struct GpuSplatData {
     pub position: [f32; 3],
@@ -16,22 +14,14 @@ pub struct GpuSplatData {
 }
 
 impl GpuSplatData {
-    pub fn from_segment(direction: Vector3, length: f32) -> Self {
-        let safe_dir = if direction.length_squared() > 0.0 {
-            direction.normalized()
-        } else {
-            Vector3::UP
-        };
-
-        let tip = safe_dir * length;
-
+    pub fn new(position: Vector3, color: [f32; 3], density: f32, sigma2: f32) -> Self {
         Self {
-            position: [tip.x, tip.y, tip.z],
-            density: 1.0,
-            cov0: [0.010, 0.0, 0.0],
-            cov1: [0.0, 0.010, 0.0],
-            cov2: [0.0, 0.0, 0.010],
-            color: [0.20, 0.95, 0.35],
+            position: [position.x, position.y, position.z],
+            density,
+            cov0: [sigma2, 0.0, 0.0],
+            cov1: [0.0, sigma2, 0.0],
+            cov2: [0.0, 0.0, sigma2],
+            color,
             pad: 0.0,
         }
     }
@@ -60,12 +50,35 @@ fn splats_to_storage_bytes(splats: &[GpuSplatData]) -> Vec<u8> {
 }
 
 pub fn single_upward_segment_splat_bytes() -> Vec<u8> {
-    let mut segments = Segments::new();
-    let id = segments.push_root(Vector3::UP, 1.0);
+    let mut splats = Vec::new();
+    let steps = 27;
+    let extent = 1.6;
+    let sigma2 = 0.00005;
+    let density = 0.07;
 
-    let direction = segments.direction(id).unwrap_or(Vector3::UP);
-    let length = segments.length(id).unwrap_or(1.0);
-    let splat = GpuSplatData::from_segment(direction, length);
+    for i in 0..steps {
+        let t = (i as f32 / (steps - 1) as f32) * 2.0 - 1.0;
+        let v = t * extent;
 
-    splats_to_storage_bytes(&[splat])
+        splats.push(GpuSplatData::new(
+            Vector3::new(v, 0.0, 0.0),
+            [0.95, 0.25, 0.20],
+            density,
+            sigma2,
+        ));
+        splats.push(GpuSplatData::new(
+            Vector3::new(0.0, v, 0.0),
+            [0.20, 0.95, 0.30],
+            density,
+            sigma2,
+        ));
+        splats.push(GpuSplatData::new(
+            Vector3::new(0.0, 0.0, v),
+            [0.20, 0.45, 0.95],
+            density,
+            sigma2,
+        ));
+    }
+
+    splats_to_storage_bytes(&splats)
 }
