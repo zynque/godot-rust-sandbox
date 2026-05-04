@@ -1,8 +1,11 @@
-[gd_scene format=3 uid="uid://dmhmrtv5wi3g7"]
+[gd_scene load_steps=2 format=3 uid="uid://dmhmrtv5wi3g7"]
+
+[ext_resource type="Script" uid="uid://cj7s4833ntheb" path="res://scene.gd" id="1_ulcgi"]
 
 [node name="Node2D" type="Node2D"]
+script = ExtResource("1_ulcgi")
 
 [node name="SplatViewer" type="SplatViewer" parent="."]
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(0.962231, -0.0599183, 0.265558, 0.0158945, 0.986179, 0.16492, -0.271769, -0.154471, 0.949884, 0.705073, 0.660478, 2.10112)
+transform = Transform3D(0.98613, -0.0427147, 0.160382, 0.0158945, 0.986179, 0.16492, -0.16521, -0.160084, 0.97318, 1.14684, 0.539883, 2.95384)

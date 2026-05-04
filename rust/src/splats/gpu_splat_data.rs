@@ -52,9 +52,9 @@ fn splats_to_storage_bytes(splats: &[GpuSplatData]) -> Vec<u8> {
 pub fn single_upward_segment_splat_bytes() -> Vec<u8> {
     let mut splats = Vec::new();
     let steps = 27;
-    let extent = 1.6;
-    let sigma2 = 0.00005;
-    let density = 0.07;
+    let extent = 3.6;
+    let sigma2 = 0.0005;
+    let density = 0.1;
 
     for i in 0..steps {
         let t = (i as f32 / (steps - 1) as f32) * 2.0 - 1.0;
@@ -79,6 +79,13 @@ pub fn single_upward_segment_splat_bytes() -> Vec<u8> {
             sigma2,
         ));
     }
+
+    splats.push(GpuSplatData::new(
+        Vector3::new(0.5, 0.5, 0.0),
+        [0.80, 0.05, 0.75],
+        0.8,
+        sigma2,
+    ));
 
     splats_to_storage_bytes(&splats)
 }
