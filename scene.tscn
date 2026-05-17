@@ -8,4 +8,4 @@ script = ExtResource("1_ulcgi")
 [node name="SplatViewer" type="SplatViewer" parent="."]
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(0.98613, -0.0427147, 0.160382, 0.0158945, 0.986179, 0.16492, -0.16521, -0.160084, 0.97318, 1.14684, 0.539883, 2.95384)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.882568, 0.414678, 3.83384)

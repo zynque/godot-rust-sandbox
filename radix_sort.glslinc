@@ -1,0 +1,60 @@
+#ifndef RADIX_SORT_GLSLINC
+#define RADIX_SORT_GLSLINC
+
+#ifndef RADIX_SORT_MAX_ITEMS
+#define RADIX_SORT_MAX_ITEMS 128u
+#endif
+
+const uint RADIX_BITS_PER_PASS = 8u;
+const uint RADIX_BUCKET_COUNT = 1u << RADIX_BITS_PER_PASS;
+
+// Stable least-significant-digit radix sort for uint keys.
+// Sorts keys in ascending order and applies the same permutation to indices.
+void radix_sort_u32_indices(
+    inout uint keys[RADIX_SORT_MAX_ITEMS],
+    inout uint indices[RADIX_SORT_MAX_ITEMS],
+    uint count
+) {
+    uint temp_keys[RADIX_SORT_MAX_ITEMS];
+    uint temp_indices[RADIX_SORT_MAX_ITEMS];
+
+    uint histogram[RADIX_BUCKET_COUNT];
+    uint prefix[RADIX_BUCKET_COUNT];
+
+    uint clamped_count = min(count, RADIX_SORT_MAX_ITEMS);
+
+    for (uint pass = 0u; pass < 4u; pass++) {
+        uint shift = pass * RADIX_BITS_PER_PASS;
+
+        for (uint b = 0u; b < RADIX_BUCKET_COUNT; b++) {
+            histogram[b] = 0u;
+        }
+
+        for (uint i = 0u; i < clamped_count; i++) {
+            uint bucket = (keys[i] >> shift) & (RADIX_BUCKET_COUNT - 1u);
+            histogram[bucket]++;
+        }
+
+        uint running = 0u;
+        for (uint b = 0u; b < RADIX_BUCKET_COUNT; b++) {
+            prefix[b] = running;
+            running += histogram[b];
+        }
+
+        for (uint i = 0u; i < clamped_count; i++) {
+            uint key = keys[i];
+            uint bucket = (key >> shift) & (RADIX_BUCKET_COUNT - 1u);
+            uint out_index = prefix[bucket]++;
+
+            temp_keys[out_index] = key;
+            temp_indices[out_index] = indices[i];
+        }
+
+        for (uint i = 0u; i < clamped_count; i++) {
+            keys[i] = temp_keys[i];
+            indices[i] = temp_indices[i];
+        }
+    }
+}
+
+#endif

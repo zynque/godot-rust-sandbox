@@ -1,6 +1,9 @@
 #[compute]
 #version 450
 
+#define RADIX_SORT_MAX_ITEMS 128u
+#include "res://radix_sort.glslinc"
+
 layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(rgba32f, binding = 0) uniform image2D output_image;
@@ -34,9 +37,29 @@ void main() {
 
     vec3 color = vec3(0.02, 0.02, 0.03);
 
-    uint splat_count = splats.items.length();
+    uint sort_keys[RADIX_SORT_MAX_ITEMS];
+    uint sort_indices[RADIX_SORT_MAX_ITEMS];
+
+    uint splat_count = min(splats.items.length(), RADIX_SORT_MAX_ITEMS);
     for (uint i = 0u; i < splat_count; i++) {
         SplatData splat = splats.items[i];
+
+        vec4 world_pos = vec4(splat.position_density.xyz, 1.0);
+        vec4 view_pos = camera.view * world_pos;
+
+        float depth = -view_pos.z;
+        uint depth_key = floatBitsToUint(max(depth, 0.0));
+
+        // Ascending radix sort + reverse traversal gives back-to-front order.
+        sort_keys[i] = depth_key;
+        sort_indices[i] = i;
+    }
+
+    radix_sort_u32_indices(sort_keys, sort_indices, splat_count);
+
+    for (uint order = 0u; order < splat_count; order++) {
+        uint sorted_i = splat_count - 1u - order;
+        SplatData splat = splats.items[sort_indices[sorted_i]];
         float sigma2 = max(splat.cov0_pad.x, 0.00001);
 
         vec4 world_pos = vec4(splat.position_density.xyz, 1.0);
@@ -50,8 +73,10 @@ void main() {
         vec2 d = uv - center;
         float dist2 = dot(d, d);
         float weight = splat.position_density.w * exp(-dist2 / (2.0 * sigma2));
+        float alpha = clamp(1.0 - exp(-weight), 0.0, 1.0);
 
-        color += splat.color_pad.xyz * weight;
+        // Source-over compositing in back-to-front order.
+        color = splat.color_pad.xyz * alpha + color * (1.0 - alpha);
     }
 
     color = clamp(color, vec3(0.0), vec3(1.0));
