@@ -1,6 +1,11 @@
 #define MIN_FLOAT -1e38
 #define MAX_FLOAT 1e38
 
+#define MAX_STEPS 2000
+#define ISOSURFACE 0.5
+#define STEP_SIZE 0.005
+
+//------------------------------------------------------------
 
 struct ParcelShape {
     vec3 forward;
@@ -15,14 +20,15 @@ struct ParcelShape {
 struct Parcel {
     vec3 mean;
     mat3 covariance;
-    mat3 inverseCovariance; // TODO: precompute
+    mat3 inverseCovariance;
     float peakDensity;
     vec3 color;
 };
 
-struct ParcelSurfacePoint {
-    vec3 point;
+struct ParcelIntersection {
+    bool isSurface;
     float density;
+    vec3 point;
     vec3 normal;
 };
 
@@ -106,14 +112,11 @@ vec3 normalAtPoint(Parcel[3] parcels, vec3 p) {
     return normalize(-densityGradient(parcels, p));
 }
 
-
-#define MAX_STEPS 2000
-#define ISOSURFACE 0.5
-#define STEP_SIZE 0.005
-
-float rayMarch(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
+ParcelIntersection intersectParcels(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
     float t = 0.0;
     float maxDensity = 0.0;
+    ParcelIntersection intersection;
+    
     for (int i = 0; i < MAX_STEPS; i++) {
         vec3 p = cameraPosition + t * cameraDirection;
         float d = 0.0;
@@ -121,30 +124,20 @@ float rayMarch(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
             d += parcelDensity(parcels[j], p);
         maxDensity = max(maxDensity, d);
 
-        if (d > ISOSURFACE)
-            return 0.2;
+        if (d > ISOSURFACE) {
+            intersection.isSurface = true;
+            intersection.density = maxDensity;
+            intersection.point = p;
+            intersection.normal = normalAtPoint(parcels, p);
+            return intersection;
+        }
 
         t += STEP_SIZE;
     }
-    return maxDensity;
-}
-
-vec3 findSurface(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
-    float t = 0.0;
-    float maxDensity = 0.0;
-    for (int i = 0; i < MAX_STEPS; i++) {
-        vec3 p = cameraPosition + t * cameraDirection;
-        float d = 0.0;
-        for(int j = 0; j < 3; j++)
-            d += parcelDensity(parcels[j], p);
-        maxDensity = max(maxDensity, d);
-
-        if (d > ISOSURFACE)
-            return p;
-
-        t += STEP_SIZE;
-    }
-    return vec3(0);
+    
+    intersection.isSurface = false;
+    intersection.density = maxDensity;
+    return intersection;
 }
 
 float getLight(vec3 p, vec3 normal) {
@@ -209,13 +202,19 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     
     vec3 cameraPosition = vec3(.5,1.5,0);
     vec3 cameraDirection = normalize(vec3(uv.x, uv.y, -1));
-    float density = rayMarch(cameraPosition, cameraDirection, parcels);
-    vec3 surfacePoint = findSurface(cameraPosition, cameraDirection, parcels);
-    vec3 normal = normalAtPoint(parcels, surfacePoint);
-    float light = getLight(surfacePoint, normal);
-    float color = max(light, density);
-    if(surfacePoint == vec3(0.0))
+    ParcelIntersection intersection = intersectParcels(cameraPosition, cameraDirection, parcels);
+    float density = intersection.density;
+    vec3 surfacePoint = intersection.point;
+    vec3 normal = intersection.normal;
+    
+    float color;
+    if(intersection.isSurface) {
+        float light = getLight(surfacePoint, normal);
+        color = max(light, density);
+    }
+    else {
         color = density;
-
+    }
+    
     fragColor = vec4(vec3(color * vec3(0.25, 0.75, 0.35)), 1.0);
 }
