@@ -64,7 +64,7 @@ vec2 distanceToBounds(
 
 float parcelDensity(Parcel parcel, vec3 p) {
     vec3 d = p - parcel.mean;
-    mat3 invCov = inverse(parcel.covariance);
+    mat3 invCov = parcel.inverseCovariance;
     float mahalanobisDistanceSquared = dot(d, invCov * d);
     float falloff = exp(-0.5 * mahalanobisDistanceSquared);
     return parcel.peakDensity * falloff;
@@ -102,7 +102,7 @@ vec3 densityGradient(Parcel[3] parcels, vec3 p) {
         vec3 d = p - parcels[i].mean;
         float rho = parcelDensity(parcels[i], p);
 
-        g += -rho * (inverse(parcels[i].covariance) * d);
+        g += -rho * (parcels[i].inverseCovariance * d);
     }
 
     return g;
@@ -166,15 +166,14 @@ ParcelIntersection intersectParcels(vec3 cameraPosition, vec3 cameraDirection, P
 
 float getLight(vec3 p, vec3 normal) {
     vec3 lightPos = vec3(0, 6, 0);
-    //lightPos += 4.0 * vec3(sin(0.1 * iTime), 0.0, cos(0.1 * iTime));
     vec3 lightVector = normalize(lightPos - p);
     float diffuse = clamp(dot(normal, lightVector), 0.0, 1.0);
     return diffuse;
 }
 
 Parcel[3] getParcels() {    
-    float c = cos(0.5 * iTime);
-    float s = sin(0.5 * iTime);
+    float c = cos(0.8 * iTime);
+    float s = sin(0.8 * iTime);
  
     ParcelShape shape1;
     shape1.forward = vec3(0,0,-1);
@@ -183,7 +182,7 @@ Parcel[3] getParcels() {
     shape1.width = 0.3;
     shape1.height = 0.02;
     Parcel parcel1;
-    parcel1.mean = vec3(-0.8 * c,1,-3);
+    parcel1.mean = vec3(-0.6 * c,1,-3);
     parcel1.covariance = covarianceFromShape(shape1);
     parcel1.inverseCovariance = inverse(parcel1.covariance);
     parcel1.peakDensity = 0.8;
@@ -196,7 +195,7 @@ Parcel[3] getParcels() {
     shape2.width = 0.3;
     shape2.height = 0.02;
     Parcel parcel2;
-    parcel2.mean = vec3(0.8 * c,1,-3);
+    parcel2.mean = vec3(0.6 * c,1,-3);
     parcel2.covariance = covarianceFromShape(shape2);
     parcel2.inverseCovariance = inverse(parcel2.covariance);
     parcel2.peakDensity = 0.8;
