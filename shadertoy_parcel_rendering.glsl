@@ -40,7 +40,7 @@ vec2 distanceToBounds(
     Parcel parcel,
     float sigmas
 ) {
-    mat3 invCov = inverse(parcel.covariance);
+    mat3 invCov = parcel.inverseCovariance;
 
     vec3 oc = cameraPosition - parcel.mean;
     vec3 d = normalize(cameraDirection);
@@ -52,7 +52,7 @@ vec2 distanceToBounds(
     float discriminant = B * B - 4.0 * A * C;
 
     if (discriminant < 0.0)
-        return vec2(MIN_FLOAT, MAX_FLOAT);   // no intersection
+        return vec2(MIN_FLOAT, MAX_FLOAT); // no intersection
 
     float s = sqrt(discriminant);
 
@@ -112,11 +112,34 @@ vec3 normalAtPoint(Parcel[3] parcels, vec3 p) {
     return normalize(-densityGradient(parcels, p));
 }
 
+vec2 calculateParcelDistanceBounds(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
+    vec2 bounds = vec2(MIN_FLOAT, MAX_FLOAT);
+    for(int i = 0; i < 3; i++) {
+        vec2 pb = distanceToBounds(cameraPosition, cameraDirection, parcels[i], 3.0);
+        if(bounds.x == MIN_FLOAT)
+            bounds.x = pb.x;
+        else if(pb.x != MIN_FLOAT)
+            bounds.x = min(bounds.x, pb.x);
+        if(bounds.y == MAX_FLOAT)
+            bounds.y = pb.y;
+        else if(pb.y != MAX_FLOAT)
+            bounds.y = max(bounds.y, pb.y);
+    }
+    return bounds;
+}
+
 ParcelIntersection intersectParcels(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
-    float t = 0.0;
-    float maxDensity = 0.0;
     ParcelIntersection intersection;
+    intersection.isSurface = false;
+    intersection.density = 0.0;
     
+    vec2 range = calculateParcelDistanceBounds(cameraPosition, cameraDirection, parcels);
+    if(range.x == MIN_FLOAT || range.y == MAX_FLOAT)
+        return intersection;   
+
+    float t = range.x;
+    float maxDensity = 0.0;
+
     for (int i = 0; i < MAX_STEPS; i++) {
         vec3 p = cameraPosition + t * cameraDirection;
         float d = 0.0;
@@ -133,9 +156,10 @@ ParcelIntersection intersectParcels(vec3 cameraPosition, vec3 cameraDirection, P
         }
 
         t += STEP_SIZE;
+        if(t > range.y)
+            break;
     }
     
-    intersection.isSurface = false;
     intersection.density = maxDensity;
     return intersection;
 }
@@ -203,17 +227,14 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     vec3 cameraPosition = vec3(.5,1.5,0);
     vec3 cameraDirection = normalize(vec3(uv.x, uv.y, -1));
     ParcelIntersection intersection = intersectParcels(cameraPosition, cameraDirection, parcels);
-    float density = intersection.density;
-    vec3 surfacePoint = intersection.point;
-    vec3 normal = intersection.normal;
     
     float color;
     if(intersection.isSurface) {
-        float light = getLight(surfacePoint, normal);
-        color = max(light, density);
+        float light = getLight(intersection.point, intersection.normal);
+        color = max(light, intersection.density);
     }
     else {
-        color = density;
+        color = intersection.density;
     }
     
     fragColor = vec4(vec3(color * vec3(0.25, 0.75, 0.35)), 1.0);
