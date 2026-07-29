@@ -4,6 +4,8 @@
 #define MAX_STEPS 2000
 #define ISOSURFACE 0.5
 #define STEP_SIZE 0.005
+#define MAX_CANDIDATES 10
+#define PARCEL_BOUND_SIGMAS 3.0
 
 //------------------------------------------------------------
 
@@ -32,18 +34,27 @@ struct ParcelIntersection {
     vec3 normal;
 };
 
+struct ParcelBundle {
+    Parcel[MAX_CANDIDATES] parcels;
+    int size;
+};
+
+struct Ray {
+    vec3 origin;
+    vec3 direction; // Normalized
+};
+
 //------------------------------------------------------------
 
 vec2 distanceToBounds(
-    vec3 cameraPosition,
-    vec3 cameraDirection,
+    Ray ray,
     Parcel parcel,
     float sigmas
 ) {
     mat3 invCov = parcel.inverseCovariance;
 
-    vec3 oc = cameraPosition - parcel.mean;
-    vec3 d = normalize(cameraDirection);
+    vec3 oc = ray.origin - parcel.mean;
+    vec3 d = ray.direction;
 
     float A = dot(d, invCov * d);
     float B = 2.0 * dot(d, invCov * oc);
@@ -62,7 +73,7 @@ vec2 distanceToBounds(
     return vec2(min(t0, t1), max(t0, t1));
 }
 
-float parcelDensity(Parcel parcel, vec3 p) {
+float parcelDensity(vec3 p, Parcel parcel) {
     vec3 d = p - parcel.mean;
     mat3 invCov = parcel.inverseCovariance;
     float mahalanobisDistanceSquared = dot(d, invCov * d);
@@ -95,27 +106,29 @@ mat3 covarianceFromShape(ParcelShape shape) {
         + t2 * outerProduct(normal, normal);
 }
 
-vec3 densityGradient(Parcel[3] parcels, vec3 p) {
+vec3 densityGradient(vec3 p, ParcelBundle bundle) {
     vec3 g = vec3(0.0);
 
-    for (int i = 0; i < 3; i++) {
-        vec3 d = p - parcels[i].mean;
-        float rho = parcelDensity(parcels[i], p);
+    for (int i = 0; i < bundle.size; i++) {
+        Parcel parcel = bundle.parcels[i];
+        vec3 d = p - parcel.mean;
+        float rho = parcelDensity(p, parcel);
 
-        g += -rho * (parcels[i].inverseCovariance * d);
+        g += -rho * (parcel.inverseCovariance * d);
     }
 
     return g;
 }
 
-vec3 normalAtPoint(Parcel[3] parcels, vec3 p) {
-    return normalize(-densityGradient(parcels, p));
+vec3 normalAtPoint(vec3 p, ParcelBundle bundle) {
+    return normalize(-densityGradient(p, bundle));
 }
 
-vec2 calculateParcelDistanceBounds(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
+vec2 calculateParcelDistanceBounds(Ray ray, ParcelBundle bundle) {
     vec2 bounds = vec2(MIN_FLOAT, MAX_FLOAT);
-    for(int i = 0; i < 3; i++) {
-        vec2 pb = distanceToBounds(cameraPosition, cameraDirection, parcels[i], 3.0);
+    for(int i = 0; i < bundle.size; i++) {
+        Parcel parcel = bundle.parcels[i];
+        vec2 pb = distanceToBounds(ray, parcel, PARCEL_BOUND_SIGMAS);
         if(bounds.x == MIN_FLOAT)
             bounds.x = pb.x;
         else if(pb.x != MIN_FLOAT)
@@ -128,12 +141,12 @@ vec2 calculateParcelDistanceBounds(vec3 cameraPosition, vec3 cameraDirection, Pa
     return bounds;
 }
 
-ParcelIntersection intersectParcels(vec3 cameraPosition, vec3 cameraDirection, Parcel[3] parcels) {
+ParcelIntersection traceParcels(Ray ray, ParcelBundle bundle) {
     ParcelIntersection intersection;
     intersection.isSurface = false;
     intersection.density = 0.0;
     
-    vec2 range = calculateParcelDistanceBounds(cameraPosition, cameraDirection, parcels);
+    vec2 range = calculateParcelDistanceBounds(ray, bundle);
     if(range.x == MIN_FLOAT || range.y == MAX_FLOAT)
         return intersection;   
 
@@ -141,17 +154,17 @@ ParcelIntersection intersectParcels(vec3 cameraPosition, vec3 cameraDirection, P
     float maxDensity = 0.0;
 
     for (int i = 0; i < MAX_STEPS; i++) {
-        vec3 p = cameraPosition + t * cameraDirection;
+        vec3 p = ray.origin + t * ray.direction;
         float d = 0.0;
-        for(int j = 0; j < 3; j++)
-            d += parcelDensity(parcels[j], p);
+        for(int j = 0; j < bundle.size; j++)
+            d += parcelDensity(p, bundle.parcels[j]);
         maxDensity = max(maxDensity, d);
 
         if (d > ISOSURFACE) {
             intersection.isSurface = true;
             intersection.density = maxDensity;
             intersection.point = p;
-            intersection.normal = normalAtPoint(parcels, p);
+            intersection.normal = normalAtPoint(p, bundle);
             return intersection;
         }
 
@@ -214,18 +227,23 @@ Parcel[3] getParcels() {
     parcel3.peakDensity = 0.8;
     parcel3.color = vec3(0.25, 0.75, 0.35);
 
-    return Parcel[](parcel1, parcel2, parcel3);
+    return Parcel[3](parcel1, parcel2, parcel3);
 }
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     vec2 uv = normalizeScreenCoordinates(fragCoord);
    
-    Parcel[3] parcels = getParcels();
+    ParcelBundle bundle;
+    bundle.size = 3;
+    Parcel[3] threeParcels = getParcels();
+    for(int i = 0; i < 3; i++)
+        bundle.parcels[i] = threeParcels[i];
     
     vec3 cameraPosition = vec3(.5,1.5,0);
     vec3 cameraDirection = normalize(vec3(uv.x, uv.y, -1));
-    ParcelIntersection intersection = intersectParcels(cameraPosition, cameraDirection, parcels);
+    Ray ray = Ray(cameraPosition, cameraDirection);
+    ParcelIntersection intersection = traceParcels(ray, bundle);
     
     float color;
     if(intersection.isSurface) {
