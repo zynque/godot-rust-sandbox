@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dm6be8e1csk5t"
+path="res://.godot/imported/shadertoy_parcel_rendering.glsl-faee51ab95fadd398b514c091abc0395.res"
+
+[deps]
+
+source_file="res://shadertoy_parcel_rendering.glsl"
+dest_files=["res://.godot/imported/shadertoy_parcel_rendering.glsl-faee51ab95fadd398b514c091abc0395.res"]
+
+[params]
+

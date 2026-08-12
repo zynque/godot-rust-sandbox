@@ -44,6 +44,11 @@ struct Ray {
     vec3 direction; // Normalized
 };
 
+struct BoundaryIntervalSet {
+    float[2*MAX_CANDIDATES] distances;
+    int size;
+};
+
 //------------------------------------------------------------
 
 vec2 distanceToBounds(
@@ -141,6 +146,39 @@ vec2 calculateParcelDistanceBounds(Ray ray, ParcelBundle bundle) {
     return bounds;
 }
 
+void sortBoundaries(inout BoundaryIntervalSet intervals)
+{
+    // A simple insertion sort should be good enough for our small bundles
+    for (int i = 1; i < intervals.size; i++)
+    {
+        float dist = intervals.distances[i];
+        int j = i - 1;
+
+        while (j >= 0 && intervals.distances[j] > dist)
+        {
+            intervals.distances[j + 1] = intervals.distances[j];
+            j--;
+        }
+
+        intervals.distances[j + 1] = dist;
+    }
+}
+
+BoundaryIntervalSet calculateParcelBoundaryIntervals(Ray ray, ParcelBundle bundle) {
+    BoundaryIntervalSet bounds;
+    for(int i = 0; i < bundle.size; i++) {
+        Parcel parcel = bundle.parcels[i];
+        vec2 interval = distanceToBounds(ray, parcel, PARCEL_BOUND_SIGMAS);
+        if(interval.x > MIN_FLOAT && interval.y < MAX_FLOAT) {
+            bounds.distances[bounds.size] = interval.x;
+            bounds.distances[bounds.size + 1] = interval.y;
+            bounds.size += 2;
+        }
+    }
+    sortBoundaries(bounds);
+    return bounds;
+}
+
 ParcelIntersection traceParcels(Ray ray, ParcelBundle bundle) {
     ParcelIntersection intersection;
     intersection.isSurface = false;
@@ -148,9 +186,16 @@ ParcelIntersection traceParcels(Ray ray, ParcelBundle bundle) {
     
     vec2 range = calculateParcelDistanceBounds(ray, bundle);
     if(range.x == MIN_FLOAT || range.y == MAX_FLOAT)
-        return intersection;   
+        return intersection;
 
     float t = range.x;
+
+    //BoundaryIntervalSet boundaries = calculateParcelBoundaryIntervals(ray, bundle);
+    //if(boundaries.size == 0)
+    //    return intersection;
+    //
+    //float t = boundaries.distances[0];
+    
     float maxDensity = 0.0;
 
     for (int i = 0; i < MAX_STEPS; i++) {
@@ -170,6 +215,7 @@ ParcelIntersection traceParcels(Ray ray, ParcelBundle bundle) {
 
         t += STEP_SIZE;
         if(t > range.y)
+        //if(t > boundaries.distances[boundaries.size - 1])
             break;
     }
     
