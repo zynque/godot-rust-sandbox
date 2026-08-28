@@ -44,3 +44,23 @@ impl Segments {
         self.length.get(id).copied()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_root_stores_and_reads_back_values() {
+        let mut segments = Segments::new();
+        let direction = Vector3::new(1.0, 0.0, 0.0);
+        let length = 2.5;
+
+        let id = segments.push_root(direction, length);
+
+        assert_eq!(id, 0);
+        assert_eq!(segments.direction(id), Some(direction));
+        assert_eq!(segments.length(id), Some(length));
+        assert_eq!(segments.direction(9999), None);
+        assert_eq!(segments.length(9999), None);
+    }
+}
