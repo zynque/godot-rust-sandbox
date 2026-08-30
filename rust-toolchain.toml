@@ -1,0 +1,4 @@
+[toolchain]
+# godot-rust 0.5.x requires Rust 1.94 or later.
+# rustup will automatically download this toolchain the first time you build.
+channel = "1.94"
