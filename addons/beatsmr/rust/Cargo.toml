@@ -1,0 +1,15 @@
+[package]
+name = "beatsmr"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+
+[dependencies]
+godot = "0.5.5"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.dev]
+debug = true
+split-debuginfo = "packed"
