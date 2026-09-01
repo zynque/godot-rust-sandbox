@@ -11,8 +11,7 @@ use godot::classes::rendering_device::UniformType;
 // ---------------------------------------------------------------------------
 // SortTester
 //
-// A #[tool] Node that, when it enters the scene tree inside the Godot editor,
-// automatically:
+// A #[tool] Node that, when triggered from the editor Inspector,
 //   1. Compiles addons/beatsmr/shaders/sort_test.glsl as a compute shader.
 //   2. Uploads a small test array via a storage buffer.
 //   3. Dispatches one work-group.
@@ -48,13 +47,19 @@ impl INode for SortTester {
         Self { base }
     }
 
-    fn ready(&mut self) {
+    fn ready(&mut self) {}
+}
+
+#[godot_api]
+impl SortTester {
+    #[func]
+    fn run_tests(&mut self) {
         if !Engine::singleton().is_editor_hint() {
             return;
         }
 
-        let Some(mut rd) = RenderingServer::singleton().get_rendering_device() else {
-            godot_warn!("SortTester: no RenderingDevice available – skipping tests.");
+        let Some(mut rd) = RenderingServer::singleton().create_local_rendering_device() else {
+            godot_warn!("SortTester: failed to create local RenderingDevice; skipping tests.");
             return;
         };
 
