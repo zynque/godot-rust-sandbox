@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.94"
 
 [dependencies]
-godot = "0.5.5"
+godot = {version = "0.5.5", features = ["api-4-5"]}
 
 [lib]
 crate-type = ["cdylib"]

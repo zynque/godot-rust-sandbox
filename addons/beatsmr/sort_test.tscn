@@ -1,3 +1,5 @@
-[gd_scene format=3 uid="uid://beatsmr_sort_test"]
+[gd_scene load_steps=2 format=3 uid="uid://beatsmr_sort_test"]
+
+[ext_resource type="GDExtension" path="res://addons/beatsmr/beatsmr.gdextension" id="1_xd1m8"]
 
 [node name="SortTest" type="SortTester"]
