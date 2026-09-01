@@ -176,7 +176,7 @@ impl INode for SplatViewer {
 
         let camera_data = self.camera_data_for_frame();
 
-        let callable = Callable::from_local_fn("splat_render_thread_dispatch", move |_| {
+        let callable = Callable::from_fn("splat_render_thread_dispatch", move |_| {
             if let Some(mut rd) = RenderingServer::singleton().get_rendering_device() {
                 update_camera_buffer_raw(&mut rd, camera_buffer_rid, &camera_data);
                 dispatch_compute_raw(
@@ -188,7 +188,7 @@ impl INode for SplatViewer {
                 );
             }
 
-            Ok(Variant::nil())
+            Variant::nil()
         });
 
         let mut rs = RenderingServer::singleton();

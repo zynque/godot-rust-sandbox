@@ -15,6 +15,10 @@ run/main_scene="uid://dmhmrtv5wi3g7"
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/beatsmr/plugin.cfg")
+
 [input]
 
 move_left={
