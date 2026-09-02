@@ -1,0 +1,5 @@
+[gd_scene load_steps=2 format=3 uid="uid://beatsmr_parcel_renderer_test"]
+
+[ext_resource type="GDExtension" path="res://addons/beatsmr/beatsmr.gdextension" id="1_gdext"]
+
+[node name="ParcelRendererTest" type="ParcelRendererNode"]
