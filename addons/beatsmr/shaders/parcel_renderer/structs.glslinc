@@ -1,0 +1,39 @@
+struct ParcelShape {
+    vec3 forward;
+    vec3 normal;
+
+    // Measured in standard deviations, not spatial distances.
+    float axis_length;
+    float width;
+    float height;
+};
+
+struct Parcel {
+    vec3 mean;
+    mat3 covariance;
+    mat3 inverseCovariance;
+    float peakDensity;
+    vec3 color;
+};
+
+struct ParcelIntersection {
+    bool isSurface;
+    float density;
+    vec3 point;
+    vec3 normal;
+};
+
+struct ParcelBundle {
+    Parcel[MAX_CANDIDATES] parcels;
+    int size;
+};
+
+struct Ray {
+    vec3 origin;
+    vec3 direction; // Normalized.
+};
+
+struct BoundaryIntervalSet {
+    float[2 * MAX_CANDIDATES] distances;
+    int size;
+};

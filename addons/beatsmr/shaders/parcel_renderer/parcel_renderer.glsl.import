@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dk4d7urlpl0kv"
+path="res://.godot/imported/parcel_renderer.glsl-a687b031236c5367bb91dddc50fdb912.res"
+
+[deps]
+
+source_file="res://addons/beatsmr/shaders/parcel_renderer/parcel_renderer.glsl"
+dest_files=["res://.godot/imported/parcel_renderer.glsl-a687b031236c5367bb91dddc50fdb912.res"]
+
+[params]
+

@@ -1,0 +1,94 @@
+vec2 distanceToBounds(
+    Ray ray,
+    Parcel parcel,
+    float sigmas
+) {
+    mat3 invCov = parcel.inverseCovariance;
+
+    vec3 oc = ray.origin - parcel.mean;
+    vec3 d = ray.direction;
+
+    float A = dot(d, invCov * d);
+    float B = 2.0 * dot(d, invCov * oc);
+    float C = dot(oc, invCov * oc) - sigmas * sigmas;
+
+    float discriminant = B * B - 4.0 * A * C;
+
+    if (discriminant < 0.0)
+        return vec2(MIN_FLOAT, MAX_FLOAT); // No intersection.
+
+    float s = sqrt(discriminant);
+
+    float t0 = (-B - s) / (2.0 * A);
+    float t1 = (-B + s) / (2.0 * A);
+
+    return vec2(min(t0, t1), max(t0, t1));
+}
+
+float parcelDensity(vec3 p, Parcel parcel) {
+    vec3 d = p - parcel.mean;
+    mat3 invCov = parcel.inverseCovariance;
+    float mahalanobisDistanceSquared = dot(d, invCov * d);
+    float falloff = exp(-0.5 * mahalanobisDistanceSquared);
+    return parcel.peakDensity * falloff;
+}
+
+vec2 normalizeScreenCoordinates(vec2 fragCoord) {
+    return (fragCoord - 0.5 * iResolution.xy) / iResolution.y;
+}
+
+// Gram-Schmidt orthogonalization.
+// Returns v2 stripped of any portion pointing toward v1.
+vec3 orthogonalize(vec3 v1, vec3 v2) {
+    return normalize(v2 - dot(v2, v1) * v1);
+}
+
+mat3 covarianceFromShape(ParcelShape shape) {
+    vec3 forward = normalize(shape.forward);
+    vec3 normal = orthogonalize(forward, shape.normal);
+    vec3 right = cross(forward, normal);
+
+    float l2 = shape.axis_length * shape.axis_length;
+    float w2 = shape.width * shape.width;
+    float t2 = shape.height * shape.height;
+
+    return
+          l2 * outerProduct(forward, forward)
+        + w2 * outerProduct(right, right)
+        + t2 * outerProduct(normal, normal);
+}
+
+vec3 densityGradient(vec3 p, ParcelBundle bundle) {
+    vec3 g = vec3(0.0);
+
+    for (int i = 0; i < bundle.size; i++) {
+        Parcel parcel = bundle.parcels[i];
+        vec3 d = p - parcel.mean;
+        float rho = parcelDensity(p, parcel);
+
+        g += -rho * (parcel.inverseCovariance * d);
+    }
+
+    return g;
+}
+
+vec3 normalAtPoint(vec3 p, ParcelBundle bundle) {
+    return normalize(-densityGradient(p, bundle));
+}
+
+vec2 calculateParcelDistanceBounds(Ray ray, ParcelBundle bundle) {
+    vec2 bounds = vec2(MIN_FLOAT, MAX_FLOAT);
+    for (int i = 0; i < bundle.size; i++) {
+        Parcel parcel = bundle.parcels[i];
+        vec2 pb = distanceToBounds(ray, parcel, PARCEL_BOUND_SIGMAS);
+        if (bounds.x == MIN_FLOAT)
+            bounds.x = pb.x;
+        else if (pb.x != MIN_FLOAT)
+            bounds.x = min(bounds.x, pb.x);
+        if (bounds.y == MAX_FLOAT)
+            bounds.y = pb.y;
+        else if (pb.y != MAX_FLOAT)
+            bounds.y = max(bounds.y, pb.y);
+    }
+    return bounds;
+}

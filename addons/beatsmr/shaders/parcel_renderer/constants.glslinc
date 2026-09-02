@@ -1,0 +1,8 @@
+#define MIN_FLOAT -1e38
+#define MAX_FLOAT 1e38
+
+#define MAX_STEPS 2000
+#define ISOSURFACE 0.5
+#define STEP_SIZE 0.005
+#define MAX_CANDIDATES 10
+#define PARCEL_BOUND_SIGMAS 3.0

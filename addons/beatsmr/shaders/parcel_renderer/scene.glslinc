@@ -1,0 +1,45 @@
+Parcel[3] getParcels() {
+    float c = cos(0.8 * iTime);
+    float s = sin(0.8 * iTime);
+
+    ParcelShape shape1;
+    shape1.forward = vec3(0, 0, -1);
+    shape1.normal = vec3(0, 1, 0);
+    shape1.axis_length = 0.3;
+    shape1.width = 0.3;
+    shape1.height = 0.02;
+    Parcel parcel1;
+    parcel1.mean = vec3(-0.6 * c, 1, -3);
+    parcel1.covariance = covarianceFromShape(shape1);
+    parcel1.inverseCovariance = inverse(parcel1.covariance);
+    parcel1.peakDensity = 0.8;
+    parcel1.color = vec3(0.25, 0.75, 0.35);
+
+    ParcelShape shape2;
+    shape2.forward = vec3(0, 0, -1);
+    shape2.normal = vec3(0, 1, 0);
+    shape2.axis_length = 0.3;
+    shape2.width = 0.3;
+    shape2.height = 0.02;
+    Parcel parcel2;
+    parcel2.mean = vec3(0.6 * c, 1, -3);
+    parcel2.covariance = covarianceFromShape(shape2);
+    parcel2.inverseCovariance = inverse(parcel2.covariance);
+    parcel2.peakDensity = 0.8;
+    parcel2.color = vec3(0.25, 0.75, 0.35);
+
+    ParcelShape shape3;
+    shape3.forward = vec3(0, 0, -1);
+    shape3.normal = vec3(0, 1, 0);
+    shape3.axis_length = 0.3;
+    shape3.width = 0.02;
+    shape3.height = 0.05;
+    Parcel parcel3;
+    parcel3.mean = vec3(0, 1, -3);
+    parcel3.covariance = covarianceFromShape(shape3);
+    parcel3.inverseCovariance = inverse(parcel3.covariance);
+    parcel3.peakDensity = 0.8;
+    parcel3.color = vec3(0.25, 0.75, 0.35);
+
+    return Parcel[3](parcel1, parcel2, parcel3);
+}
