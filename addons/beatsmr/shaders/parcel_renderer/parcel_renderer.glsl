@@ -4,6 +4,10 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0, rgba32f) uniform image2D output_image;
 
+layout(set = 0, binding = 1, std140) uniform TimeParams {
+	vec4 t;
+} time_params;
+
 vec3 iResolution = vec3(1.0);
 float iTime = 0.0;
 
@@ -25,6 +29,7 @@ void main() {
 	}
 
 	iResolution = vec3(float(size.x), float(size.y), 1.0);
+	iTime = time_params.t.x;
 
 	vec4 fragColor = vec4(0.0);
 	mainImage(fragColor, vec2(pixel) + vec2(0.5));

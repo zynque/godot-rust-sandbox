@@ -53,6 +53,7 @@ impl ParcelRendererNode {
 
     fn resources_ready(&self) -> bool {
         self.texture_rid != Rid::Invalid
+            && self.time_buffer_rid != Rid::Invalid
             && self.shader_rid != Rid::Invalid
             && self.pipeline_rid != Rid::Invalid
             && self.uniform_set_rid != Rid::Invalid
@@ -122,7 +123,7 @@ impl ParcelRendererNode {
         self.sync_size_and_resources();
     }
 
-    pub(super) fn on_process(&mut self, _delta: f64) {
+    pub(super) fn on_process(&mut self, delta: f64) {
         let in_editor = Engine::singleton().is_editor_hint();
         let show_preview = !in_editor || !self.editor_selection_known || self.editor_selected;
         self.set_preview_visible(show_preview);
@@ -136,7 +137,21 @@ impl ParcelRendererNode {
             return;
         }
 
+        if self.animate {
+            self.time_seconds += delta as f32;
+        }
+
         if let Some(mut rd) = self.rd.take() {
+            if self.time_buffer_rid != Rid::Invalid {
+                let time_data = [self.time_seconds, 0.0f32, 0.0f32, 0.0f32];
+                let mut bytes = Vec::with_capacity(16);
+                for f in time_data {
+                    bytes.extend_from_slice(&f.to_le_bytes());
+                }
+                let packed = PackedByteArray::from(bytes.as_slice());
+                let _ = rd.buffer_update(self.time_buffer_rid, 0, 16, &packed);
+            }
+
             let list = rd.compute_list_begin();
             rd.compute_list_bind_compute_pipeline(list, self.pipeline_rid);
             rd.compute_list_bind_uniform_set(list, self.uniform_set_rid, 0);

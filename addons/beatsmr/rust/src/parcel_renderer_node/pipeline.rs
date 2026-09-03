@@ -22,6 +22,10 @@ impl ParcelRendererNode {
             rd.free_rid(self.texture_rid);
             self.texture_rid = Rid::Invalid;
         }
+        if self.time_buffer_rid != Rid::Invalid {
+            rd.free_rid(self.time_buffer_rid);
+            self.time_buffer_rid = Rid::Invalid;
+        }
     }
 
     pub(super) fn recreate_resources(&mut self, rd: &mut Gd<RenderingDevice>) {
@@ -58,9 +62,21 @@ impl ParcelRendererNode {
         godot_warn!("ParcelRendererNode: failed to create RGBA32F output texture.");
     }
 
+    fn create_time_buffer(&mut self, rd: &mut Gd<RenderingDevice>) {
+        self.time_buffer_rid = rd.uniform_buffer_create(16);
+        if self.time_buffer_rid == Rid::Invalid {
+            godot_warn!("ParcelRendererNode: failed to create iTime uniform buffer.");
+        }
+    }
+
     pub(super) fn create_pipeline_and_uniforms(&mut self, rd: &mut Gd<RenderingDevice>) {
         if self.texture_rid == Rid::Invalid {
             godot_warn!("ParcelRendererNode: output texture RID is invalid.");
+            return;
+        }
+
+        self.create_time_buffer(rd);
+        if self.time_buffer_rid == Rid::Invalid {
             return;
         }
 
@@ -87,11 +103,16 @@ impl ParcelRendererNode {
         output_image.set_binding(0);
         output_image.add_id(self.texture_rid);
 
+        let mut time_uniform = RdUniform::new_gd();
+        time_uniform.set_uniform_type(UniformType::UNIFORM_BUFFER);
+        time_uniform.set_binding(1);
+        time_uniform.add_id(self.time_buffer_rid);
+
         self.uniform_set_rid =
-            rd.uniform_set_create(&Array::from_iter([output_image]), self.shader_rid, 0);
+            rd.uniform_set_create(&Array::from_iter([output_image, time_uniform]), self.shader_rid, 0);
         if self.uniform_set_rid == Rid::Invalid {
             godot_warn!(
-                "ParcelRendererNode: failed to create uniform set (set=0, binding=0 image)."
+                "ParcelRendererNode: failed to create uniform set (set=0, binding=0 image, binding=1 iTime)."
             );
         }
     }
