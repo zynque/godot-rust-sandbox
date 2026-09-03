@@ -32,35 +32,30 @@ impl ParcelRendererNode {
 
     pub(super) fn create_texture(&mut self, rd: &mut Gd<RenderingDevice>) {
         let usage = TextureUsageBits::STORAGE_BIT | TextureUsageBits::SAMPLING_BIT;
-        let candidate_formats = [
-            DataFormat::R32G32B32A32_SFLOAT,
-            DataFormat::R16G16B16A16_SFLOAT,
-            DataFormat::R8G8B8A8_UNORM,
-        ];
+        let data_format = DataFormat::R32G32B32A32_SFLOAT;
 
-        for data_format in candidate_formats {
-            if !rd.texture_is_format_supported_for_usage(data_format, usage) {
-                continue;
-            }
+        if !rd.texture_is_format_supported_for_usage(data_format, usage) {
+            self.texture_rid = Rid::Invalid;
+            godot_warn!(
+                "ParcelRendererNode: R32G32B32A32_SFLOAT not supported for STORAGE|SAMPLING usage."
+            );
+            return;
+        }
 
-            let mut format = RdTextureFormat::new_gd();
-            format.set_width(self.width);
-            format.set_height(self.height);
-            format.set_format(data_format);
-            format.set_usage_bits(usage);
+        let mut format = RdTextureFormat::new_gd();
+        format.set_width(self.width);
+        format.set_height(self.height);
+        format.set_format(data_format);
+        format.set_usage_bits(usage);
 
-            let view = RdTextureView::new_gd();
-            let texture_rid = rd.texture_create(&format, &view);
-            if texture_rid != Rid::Invalid {
-                self.texture_rid = texture_rid;
-                return;
-            }
+        let view = RdTextureView::new_gd();
+        self.texture_rid = rd.texture_create(&format, &view);
+        if self.texture_rid != Rid::Invalid {
+            return;
         }
 
         self.texture_rid = Rid::Invalid;
-        godot_warn!(
-            "ParcelRendererNode: failed to create output texture for STORAGE|SAMPLING usage."
-        );
+        godot_warn!("ParcelRendererNode: failed to create RGBA32F output texture.");
     }
 
     pub(super) fn create_pipeline_and_uniforms(&mut self, rd: &mut Gd<RenderingDevice>) {

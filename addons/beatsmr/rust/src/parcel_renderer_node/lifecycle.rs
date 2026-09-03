@@ -1,39 +1,117 @@
-use godot::classes::{Engine, RenderingServer};
+use godot::classes::{Engine, ProjectSettings, RenderingServer};
 use godot::prelude::*;
 
 use super::ParcelRendererNode;
 
 impl ParcelRendererNode {
-    fn resolve_render_size(&self) -> Vector2 {
-        let rect_size = self.base().get_viewport_rect().size;
-        let viewport_size = self
-            .base()
-            .get_viewport()
-            .map(|vp| vp.get_visible_rect().size)
-            .unwrap_or(Vector2::ZERO);
-
-        if rect_size.x * rect_size.y >= viewport_size.x * viewport_size.y {
-            rect_size
-        } else {
-            viewport_size
+    fn ensure_render_device(&mut self) -> bool {
+        if self.rd.is_some() {
+            return true;
         }
+
+        self.rd = RenderingServer::singleton().get_rendering_device();
+        if self.rd.is_none() {
+            godot_warn!("ParcelRendererNode: RenderingDevice unavailable in current editor state.");
+            return false;
+        }
+
+        godot_print!("ParcelRendererNode: reacquired RenderingDevice.");
+        true
     }
 
-    fn refresh_render_size_if_needed(&mut self) {
+    fn resolve_render_size(&self) -> Vector2 {
+        let settings = ProjectSettings::singleton();
+
+        let width_v = settings.get_setting("display/window/size/viewport_width");
+        let height_v = settings.get_setting("display/window/size/viewport_height");
+
+        let Ok(width) = width_v.try_to::<i64>() else {
+            godot_error!(
+                "ParcelRendererNode: project setting display/window/size/viewport_width is not an integer."
+            );
+            return Vector2::ZERO;
+        };
+
+        let Ok(height) = height_v.try_to::<i64>() else {
+            godot_error!(
+                "ParcelRendererNode: project setting display/window/size/viewport_height is not an integer."
+            );
+            return Vector2::ZERO;
+        };
+
+        if width <= 0 || height <= 0 {
+            godot_error!(
+                "ParcelRendererNode: invalid project viewport size {}x{} from ProjectSettings.",
+                width,
+                height,
+            );
+            return Vector2::ZERO;
+        }
+
+        Vector2::new(width as f32, height as f32)
+    }
+
+    fn resources_ready(&self) -> bool {
+        self.texture_rid != Rid::Invalid
+            && self.shader_rid != Rid::Invalid
+            && self.pipeline_rid != Rid::Invalid
+            && self.uniform_set_rid != Rid::Invalid
+    }
+
+    fn sync_size_and_resources(&mut self) {
+        if !self.ensure_render_device() {
+            return;
+        }
+
         let size = self.resolve_render_size();
         let new_w = size.x as u32;
         let new_h = size.y as u32;
 
-        if new_w == self.width && new_h == self.height {
+        if new_w <= 2 || new_h <= 2 {
+            if !self.logged_waiting_for_size {
+                godot_print!(
+                    "ParcelRendererNode waiting for valid render size from ProjectSettings; current={}x{}.",
+                    new_w,
+                    new_h,
+                );
+                self.logged_waiting_for_size = true;
+            }
             return;
         }
 
-        self.width = new_w;
-        self.height = new_h;
+        if self.logged_waiting_for_size {
+            godot_print!(
+                "ParcelRendererNode received valid project viewport size={}x{}.",
+                new_w,
+                new_h,
+            );
+            self.logged_waiting_for_size = false;
+        }
+
+        let resized = new_w != self.width || new_h != self.height;
+        if resized {
+            self.width = new_w;
+            self.height = new_h;
+            godot_print!(
+                "ParcelRendererNode using render target {}x{}.",
+                self.width,
+                self.height,
+            );
+        }
 
         if let Some(mut rd) = self.rd.take() {
-            self.recreate_resources(&mut rd);
-            self.attach_preview_texture();
+            if resized {
+                self.remove_preview_node();
+                self.recreate_resources(&mut rd);
+                self.attach_preview_texture();
+            } else if !self.resources_ready() {
+                self.create_texture(&mut rd);
+                self.create_pipeline_and_uniforms(&mut rd);
+                self.attach_preview_texture();
+            } else if !self.has_preview_node() {
+                self.attach_preview_texture();
+            }
+
             self.rd = Some(rd);
         }
     }
@@ -41,21 +119,7 @@ impl ParcelRendererNode {
     pub(super) fn on_ready(&mut self) {
         self.base_mut().set_process(true);
 
-        let size = self.resolve_render_size();
-        self.width = size.x as u32;
-        self.height = size.y as u32;
-
-        self.rd = RenderingServer::singleton().get_rendering_device();
-        let Some(mut rd) = self.rd.take() else {
-            godot_warn!("ParcelRendererNode: failed to get RenderingDevice.");
-            return;
-        };
-
-        self.create_texture(&mut rd);
-        self.create_pipeline_and_uniforms(&mut rd);
-        self.attach_preview_texture();
-
-        self.rd = Some(rd);
+        self.sync_size_and_resources();
     }
 
     pub(super) fn on_process(&mut self, _delta: f64) {
@@ -66,7 +130,7 @@ impl ParcelRendererNode {
             return;
         }
 
-        self.refresh_render_size_if_needed();
+        self.sync_size_and_resources();
 
         if self.pipeline_rid == Rid::Invalid || self.uniform_set_rid == Rid::Invalid {
             return;
@@ -85,6 +149,8 @@ impl ParcelRendererNode {
     }
 
     pub(super) fn on_exit_tree(&mut self) {
+        self.remove_preview_node();
+
         if let Some(mut rd) = self.rd.take() {
             self.destroy_resources(&mut rd);
         }

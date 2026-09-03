@@ -19,6 +19,7 @@ pub struct ParcelRendererNode {
     uniform_set_rid: Rid,
     width: u32,
     height: u32,
+    logged_waiting_for_size: bool,
     editor_selected: bool,
     editor_selection_known: bool,
 }
@@ -33,8 +34,9 @@ impl INode2D for ParcelRendererNode {
             shader_rid: Rid::Invalid,
             pipeline_rid: Rid::Invalid,
             uniform_set_rid: Rid::Invalid,
-            width: 512,
-            height: 512,
+            width: 0,
+            height: 0,
+            logged_waiting_for_size: false,
             editor_selected: false,
             editor_selection_known: false,
         }
