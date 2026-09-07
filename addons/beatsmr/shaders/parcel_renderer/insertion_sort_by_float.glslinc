@@ -1,0 +1,16 @@
+void insertionSortByFloat(inout float keys[MAX_SORT_ELEMENTS], inout uint indices[MAX_SORT_ELEMENTS], uint size) {
+    for (uint i = 1u; i < size; ++i) {
+        float key = keys[i];
+        uint key_index = indices[i];
+        int pos = int(i);
+
+        while (pos > 0 && keys[uint(pos) - 1u] > key) {
+            keys[uint(pos)] = keys[uint(pos) - 1u];
+            indices[uint(pos)] = indices[uint(pos) - 1u];
+            pos--;
+        }
+
+        keys[uint(pos)] = key;
+        indices[uint(pos)] = key_index;
+    }
+}

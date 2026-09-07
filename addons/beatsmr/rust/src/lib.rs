@@ -1,8 +1,9 @@
 use godot::prelude::*;
 
+mod insertion_sort_by_float_tester;
 mod parcel_renderer_node;
+mod shader_test_common;
 mod sort_tester;
-// pub use sort_tester::SortTester;
 
 struct BeatsmrExtension;
 

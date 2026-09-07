@@ -37,3 +37,22 @@ struct BoundaryIntervalSet {
     float[2 * MAX_CANDIDATES] distances;
     int size;
 };
+
+struct ParcelInterval {
+    float enter;
+    float exit;
+    int parcelIndex;
+};
+
+struct ParcelIntervalCluster {
+    uint start; // index of the first interval in the cluster
+    uint count;
+    float enter;
+    float exit;
+};
+
+struct ParcelIntervalClusterSet {
+    ParcelInterval[MAX_CANDIDATES] intervals;
+    ParcelIntervalCluster[MAX_CANDIDATES] clusters;
+    int size;
+};

@@ -1,0 +1,6 @@
+
+ParcelIntervalClusterSet clusterParcelIntervals(ParcelInterval[MAX_CANDIDATES] intervals, int size) {
+    ParcelIntervalClusterSet set;
+    set.size = size;
+    return set;
+}

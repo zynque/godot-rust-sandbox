@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://phv6riyhxuqs"
+path="res://.godot/imported/insertion_sort_by_float_test.glsl-3ef9a262b2016ab99481afa918a185fc.res"
+
+[deps]
+
+source_file="res://addons/beatsmr/shaders/parcel_renderer/insertion_sort_by_float_test.glsl"
+dest_files=["res://.godot/imported/insertion_sort_by_float_test.glsl-3ef9a262b2016ab99481afa918a185fc.res"]
+
+[params]
+

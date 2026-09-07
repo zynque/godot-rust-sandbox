@@ -1,12 +1,12 @@
 use godot::prelude::*;
 use godot::classes::{
     Engine,
-    RdShaderFile,
     RdUniform,
     RenderingDevice,
-    RenderingServer,
 };
 use godot::classes::rendering_device::UniformType;
+
+use crate::shader_test_common::{compile_compute_pipeline, create_rendering_device};
 
 // ---------------------------------------------------------------------------
 // SortTester
@@ -58,13 +58,15 @@ impl SortTester {
             return;
         }
 
-        let Some(mut rd) = RenderingServer::singleton().create_local_rendering_device() else {
-            godot_warn!("SortTester: failed to create local RenderingDevice; skipping tests.");
+        let Some(mut rd) = create_rendering_device("SortTester") else {
             return;
         };
 
-        let Some((shader_rid, pipeline_rid)) = compile_pipeline(&mut rd) else {
-            godot_warn!("SortTester: failed to compile sort_test.glsl – skipping tests.");
+        let Some((shader_rid, pipeline_rid)) = compile_compute_pipeline(
+            &mut rd,
+            "res://addons/beatsmr/shaders/sort_test.glsl",
+            "SortTester",
+        ) else {
             return;
         };
 
@@ -110,27 +112,6 @@ impl SortTester {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Compile the compute shader and return (shader_rid, pipeline_rid), or None on failure.
-fn compile_pipeline(rd: &mut Gd<RenderingDevice>) -> Option<(Rid, Rid)> {
-    let shader_file: Gd<RdShaderFile> =
-        load("res://addons/beatsmr/shaders/sort_test.glsl");
-
-    let spirv = shader_file.get_spirv()?;
-    let shader_rid = rd.shader_create_from_spirv(&spirv);
-    if shader_rid == Rid::Invalid {
-        return None;
-    }
-
-    let pipeline_rid = rd.compute_pipeline_create(shader_rid);
-
-    if pipeline_rid == Rid::Invalid {
-        rd.free_rid(shader_rid);
-        None
-    } else {
-        Some((shader_rid, pipeline_rid))
-    }
-}
 
 /// Upload `keys`, dispatch the shader, read back the sorted keys.
 fn run_test_case(
