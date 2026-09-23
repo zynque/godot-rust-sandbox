@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://is44ewvbvjxf"]
-
-[ext_resource type="Script" uid="uid://cdrumy8hkmtgy" path="res://addons/beatsmr/insertion_sort_by_float_test_runner.gd" id="2_3n8zh"]
-
-[node name="InsertionSortByFloatTest" type="InsertionSortByFloatTester"]
-script = ExtResource("2_3n8zh")

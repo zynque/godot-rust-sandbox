@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://bbqv5oot6pkjy"]
+
+[ext_resource type="Script" uid="uid://bbqbiich056n1" path="res://addons/beatsmr/sort_intervals_test_runner.gd" id="1_runner"]
+
+[node name="SortIntervalsTest" type="SortIntervalsTester"]
+script = ExtResource("1_runner")
