@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/beatsmr/shader_tests_runner.gd" id="1_runner"]
+
+[node name="ShaderTests" type="Node"]
+script = ExtResource("1_runner")
+
+[node name="IntersectParcelsTester" type="IntersectParcelsTester" parent="."]
+
+[node name="SortIntervalsTester" type="SortIntervalsTester" parent="."]
