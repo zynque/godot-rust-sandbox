@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://bakkxpdqhexsa"
+path="res://.godot/imported/intersect_parcels_test.glsl-57b86dbf9cff05abb537c0bb8941c996.res"
+
+[deps]
+
+source_file="res://addons/beatsmr/shaders/parcel_renderer/intersect_parcels_test.glsl"
+dest_files=["res://.godot/imported/intersect_parcels_test.glsl-57b86dbf9cff05abb537c0bb8941c996.res"]
+
+[params]
+

@@ -7,3 +7,10 @@
 #define MAX_CANDIDATES 32
 #define PARCEL_BOUND_SIGMAS 3.0
 #define MAX_CLUSTER 10
+
+#define MAX_PARCELS 100
+
+// intersect_parcels() returns at most one interval per parcel in the set.
+#define MAX_PARCEL_INTERVALS MAX_PARCELS
+
+#define MAX_PARCELS_PER_BATCH 100

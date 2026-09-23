@@ -1,6 +1,73 @@
 
-ParcelIntervalClusterSet clusterParcelIntervals(ParcelInterval[MAX_CANDIDATES] intervals, int size) {
-    ParcelIntervalClusterSet set;
-    set.size = size;
-    return set;
+// For a given set of parcels, checks intersection against given ray
+// returns intervals (ray entry/exit points) for intersecting parcels
+ParcelIntervals intersect_parcels(Ray ray, ParcelSet set) {
+    ParcelIntervals intervals;
+    intervals.size = 0;
+
+    for(uint i = 0; i < set.size; i++) {
+        uint parcel_index = set.indices[i];
+        Parcel parcel = parcel_buffer[parcel_index];
+        vec2 bounds = distanceToBounds(ray, parcel, PARCEL_BOUND_SIGMAS);
+        if(bounds.x > MIN_FLOAT && bounds.y < MAX_FLOAT) {
+            ParcelInterval interval;
+            interval.entry = bounds.x;
+            interval.exit = bounds.y;
+            interval.parcel_index = int(parcel_index);
+            intervals.items[intervals.size] = interval;
+            intervals.size++;
+        }
+    }
+
+    return intervals;
+}
+
+// Insert the interval into its position in a sorted set of intervals
+// ordered by entry
+void insert_sorted(
+    inout ParcelIntervals intervals,
+    ParcelInterval interval
+) {
+    uint i = intervals.size;
+
+    while (i > 0u && interval.entry < intervals.items[i - 1u].entry) {
+        intervals.items[i] = intervals.items[i - 1u];
+        i--;
+    }
+
+    intervals.items[i] = interval;
+    intervals.size++;
+}
+
+// Sorts the set of parcel intervals by their entry point
+// using an in place insertion sort
+void sort_intervals(inout ParcelIntervals intervals) {
+    if(intervals.size <= 1)
+        return;
+    
+    uint target_size = intervals.size;
+    intervals.size = 1;
+
+    for(uint i = 1; i <= target_size - 1; i++) {
+        insert_sorted(intervals, intervals.items[i]);
+    }
+}
+
+bool intervals_overlap(ParcelInterval i1, ParcelInterval i2) {
+    return i2.entry < i1.exit;
+}
+
+// Scans the sorted set of intervals from left to right and counts
+// the first contiguous sequence of overlapping intervals
+uint count_overlapping_intervals(ParcelIntervals intervals) {
+    if(intervals.size <= 1)
+        return intervals.size;
+    
+    uint count = 1;
+    while(count < intervals.size &&
+          intervals_overlap(intervals.items[count-1], intervals.items[count])
+        )
+        count++;
+
+    return count;
 }

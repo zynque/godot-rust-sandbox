@@ -23,6 +23,7 @@ struct ParcelIntersection {
     vec3 normal;
 };
 
+// TODO: array of indices instead of Parcels
 struct ParcelBundle {
     Parcel[MAX_CANDIDATES] parcels;
     int size;
@@ -33,15 +34,28 @@ struct Ray {
     vec3 direction; // Normalized.
 };
 
+// TODO: deprecate in favor of parcel interals and clustering
 struct BoundaryIntervalSet {
     float[2 * MAX_CANDIDATES] distances;
     int size;
 };
 
+// An interval where the camera ray intersects a parcel's boundary
 struct ParcelInterval {
-    float enter;
+    // measured as distance from camera
+    float entry;
     float exit;
-    int parcelIndex;
+    int parcel_index;
+};
+
+struct ParcelSet {
+    uint[MAX_PARCELS] indices;
+    uint size;
+};
+
+struct ParcelIntervals {
+    ParcelInterval[MAX_PARCEL_INTERVALS] items;
+    uint size;
 };
 
 struct ParcelIntervalCluster {
@@ -55,4 +69,9 @@ struct ParcelIntervalClusterSet {
     ParcelInterval[MAX_CANDIDATES] intervals;
     ParcelIntervalCluster[MAX_CANDIDATES] clusters;
     int size;
+};
+
+struct Range {
+    uint start;
+    uint size;
 };
