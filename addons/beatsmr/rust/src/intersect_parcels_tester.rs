@@ -1,19 +1,13 @@
 use godot::prelude::*;
-use godot::classes::{
-    Engine,
-    RdUniform,
-    RenderingDevice,
-};
-use godot::classes::rendering_device::UniformType;
 
-use crate::shader_test_common::{compile_compute_pipeline, create_rendering_device};
+use crate::parcel_test_common::{Interval, IntervalCase, interval_test_node};
 
 // ---------------------------------------------------------------------------
 // IntersectParcelsTester
 //
-// A tool node that compiles the isolated intersect_parcels() compute shader,
-// uploads a ray, a parcel buffer and a set of parcel indices, dispatches a
-// single work-group, and verifies the reported ray/parcel boundary intervals.
+// Compiles the isolated intersect_parcels() compute shader, uploads a ray, a
+// parcel buffer and a set of parcel indices, dispatches a single work-group,
+// and verifies the reported ray/parcel boundary intervals.
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
@@ -22,11 +16,6 @@ const CONTEXT: &str = "IntersectParcelsTester";
 
 /// Mirrors MAX_PARCELS in constants.glslinc.
 const MAX_PARCELS: usize = 100;
-/// Mirrors MAX_PARCEL_INTERVALS in constants.glslinc.
-const MAX_PARCEL_INTERVALS: usize = 100;
-/// Entry/exit come back from GPU float math, so they are compared with a
-/// tolerance. Parcel indices are integers and must match exactly.
-const EPSILON: f32 = 1e-4;
 
 /// The subset of `Parcel` that `intersect_parcels` reads. `inverse_variance`
 /// is the diagonal of the inverse covariance; all test parcels are
@@ -61,7 +50,7 @@ struct TestCase {
     parcels: &'static [TestParcel],
     set_indices: &'static [u32],
     /// (entry, exit, parcel_index) per interval, in set order.
-    expected: &'static [(f32, f32, i32)],
+    expected: &'static [Interval],
 }
 
 // A ray of entry/exit t is a parcel's 3 sigma boundary, so a unit sigma parcel
@@ -125,235 +114,62 @@ const TEST_CASES: &[TestCase] = &[
     },
 ];
 
-#[derive(GodotClass)]
-#[class(tool, base=Node)]
-pub struct IntersectParcelsTester {
-    base: Base<Node>,
-}
-
-#[godot_api]
-impl INode for IntersectParcelsTester {
-    fn init(base: Base<Node>) -> Self {
-        Self { base }
+impl IntervalCase for TestCase {
+    fn label(&self) -> &'static str {
+        self.label
     }
 
-    fn ready(&mut self) {}
-}
-
-#[godot_api]
-impl IntersectParcelsTester {
-    #[func]
-    fn run_tests(&mut self) {
-        if !Engine::singleton().is_editor_hint() {
-            return;
+    fn encode_input(&self) -> Result<Vec<f32>, String> {
+        if self.parcels.len() > MAX_PARCELS {
+            return Err(format!(
+                "{} parcels exceeds MAX_PARCELS ({})",
+                self.parcels.len(),
+                MAX_PARCELS
+            ));
         }
-
-        let Some(mut rd) = create_rendering_device(CONTEXT) else {
-            return;
-        };
-
-        let Some((shader_rid, pipeline_rid)) =
-            compile_compute_pipeline(&mut rd, TEST_SHADER_PATH, CONTEXT)
-        else {
-            return;
-        };
-
-        let mut passed = 0usize;
-        let mut failed = 0usize;
-
-        for case in TEST_CASES.iter() {
-            match run_test_case(&mut rd, pipeline_rid, shader_rid, case) {
-                Ok(intervals) => {
-                    if intervals_match(&intervals, case.expected) {
-                        godot_print!("[{}] PASS  '{}'", CONTEXT, case.label);
-                        passed += 1;
-                    } else {
-                        godot_print!(
-                            "[{}] FAIL  '{}'\n  expected: {:?}\n  got:      {:?}",
-                            CONTEXT,
-                            case.label,
-                            case.expected,
-                            intervals
-                        );
-                        failed += 1;
-                    }
-                }
-                Err(msg) => {
-                    godot_print!("[{}] ERROR '{}': {}", CONTEXT, case.label, msg);
-                    failed += 1;
-                }
+        if self.set_indices.len() > MAX_PARCELS {
+            return Err(format!(
+                "set of {} indices exceeds MAX_PARCELS ({})",
+                self.set_indices.len(),
+                MAX_PARCELS
+            ));
+        }
+        for index in self.set_indices {
+            if *index as usize >= self.parcels.len() {
+                return Err(format!(
+                    "set index {} is out of range for {} parcels",
+                    index,
+                    self.parcels.len()
+                ));
             }
         }
 
-        godot_print!(
-            "[{}] Results: {}/{} passed.",
-            CONTEXT,
-            passed,
-            passed + failed
-        );
+        let mut data = Vec::new();
+        data.extend_from_slice(&self.ray_origin);
+        data.extend_from_slice(&self.ray_direction);
 
-        rd.free_rid(pipeline_rid);
-        rd.free_rid(shader_rid);
-    }
-}
-
-fn intervals_match(actual: &[(f32, f32, i32)], expected: &[(f32, f32, i32)]) -> bool {
-    actual.len() == expected.len()
-        && actual.iter().zip(expected).all(|(a, e)| {
-            (a.0 - e.0).abs() <= EPSILON && (a.1 - e.1).abs() <= EPSILON && a.2 == e.2
-        })
-}
-
-/// Rejects test data the shader cannot represent, so a bad case fails loudly
-/// instead of reading outside the parcel buffer.
-fn validate(case: &TestCase) -> Result<(), String> {
-    if case.parcels.len() > MAX_PARCELS {
-        return Err(format!(
-            "{} parcels exceeds MAX_PARCELS ({})",
-            case.parcels.len(),
-            MAX_PARCELS
-        ));
-    }
-    if case.set_indices.len() > MAX_PARCELS {
-        return Err(format!(
-            "set of {} indices exceeds MAX_PARCELS ({})",
-            case.set_indices.len(),
-            MAX_PARCELS
-        ));
-    }
-    for index in case.set_indices {
-        if *index as usize >= case.parcels.len() {
-            return Err(format!(
-                "set index {} is out of range for {} parcels",
-                index,
-                case.parcels.len()
-            ));
+        data.push(self.parcels.len() as f32);
+        for parcel in self.parcels {
+            let [x, y, z] = parcel.inverse_variance;
+            data.extend_from_slice(&parcel.mean);
+            // Column major diagonal.
+            data.extend_from_slice(&[x, 0.0, 0.0, 0.0, y, 0.0, 0.0, 0.0, z]);
         }
+
+        data.push(self.set_indices.len() as f32);
+        data.extend(self.set_indices.iter().map(|index| *index as f32));
+
+        Ok(data)
     }
-    Ok(())
+
+    fn expected(&self) -> &'static [Interval] {
+        self.expected
+    }
 }
 
-/// Packs a case into the flat float layout the test shader expects.
-fn encode_input(case: &TestCase) -> Vec<f32> {
-    let mut data = Vec::new();
-    data.extend_from_slice(&case.ray_origin);
-    data.extend_from_slice(&case.ray_direction);
-
-    data.push(case.parcels.len() as f32);
-    for parcel in case.parcels {
-        let [x, y, z] = parcel.inverse_variance;
-        data.extend_from_slice(&parcel.mean);
-        // Column major diagonal.
-        data.extend_from_slice(&[x, 0.0, 0.0, 0.0, y, 0.0, 0.0, 0.0, z]);
-    }
-
-    data.push(case.set_indices.len() as f32);
-    data.extend(case.set_indices.iter().map(|index| *index as f32));
-
-    data
-}
-
-fn run_test_case(
-    rd: &mut Gd<RenderingDevice>,
-    pipeline_rid: Rid,
-    shader_rid: Rid,
-    case: &TestCase,
-) -> Result<Vec<(f32, f32, i32)>, String> {
-    validate(case)?;
-
-    let input = encode_input(case);
-    let mut input_bytes = Vec::with_capacity(input.len() * std::mem::size_of::<f32>());
-    for value in &input {
-        input_bytes.extend_from_slice(&value.to_le_bytes());
-    }
-    let input_byte_count = input_bytes.len() as u32;
-    let output_float_count = 1 + 3 * MAX_PARCEL_INTERVALS;
-    let output_byte_count = (output_float_count * std::mem::size_of::<f32>()) as u32;
-
-    let input_buffer_rid = rd
-        .storage_buffer_create_ex(input_byte_count)
-        .data(&PackedByteArray::from(input_bytes.as_slice()))
-        .done();
-    if input_buffer_rid == Rid::Invalid {
-        return Err("failed to create input storage buffer".into());
-    }
-
-    let zeroed = PackedByteArray::from(vec![0u8; output_byte_count as usize].as_slice());
-    let output_buffer_rid = rd
-        .storage_buffer_create_ex(output_byte_count)
-        .data(&zeroed)
-        .done();
-    if output_buffer_rid == Rid::Invalid {
-        rd.free_rid(input_buffer_rid);
-        return Err("failed to create output storage buffer".into());
-    }
-
-    let uniform_set_rid = {
-        let mut input_uniform = RdUniform::new_gd();
-        input_uniform.set_uniform_type(UniformType::STORAGE_BUFFER);
-        input_uniform.set_binding(0);
-        input_uniform.add_id(input_buffer_rid);
-
-        let mut output_uniform = RdUniform::new_gd();
-        output_uniform.set_uniform_type(UniformType::STORAGE_BUFFER);
-        output_uniform.set_binding(1);
-        output_uniform.add_id(output_buffer_rid);
-
-        rd.uniform_set_create(
-            &Array::from_iter([input_uniform, output_uniform]),
-            shader_rid,
-            0,
-        )
-    };
-    if uniform_set_rid == Rid::Invalid {
-        rd.free_rid(input_buffer_rid);
-        rd.free_rid(output_buffer_rid);
-        return Err("failed to create uniform set".into());
-    }
-
-    let list = rd.compute_list_begin();
-    rd.compute_list_bind_compute_pipeline(list, pipeline_rid);
-    rd.compute_list_bind_uniform_set(list, uniform_set_rid, 0);
-    rd.compute_list_dispatch(list, 1, 1, 1);
-    rd.compute_list_end();
-
-    rd.submit();
-    rd.sync();
-
-    let result = rd.buffer_get_data(output_buffer_rid).to_vec();
-
-    rd.free_rid(uniform_set_rid);
-    rd.free_rid(input_buffer_rid);
-    rd.free_rid(output_buffer_rid);
-
-    if result.len() < output_byte_count as usize {
-        return Err(format!(
-            "short read: expected {} bytes, got {}",
-            output_byte_count,
-            result.len()
-        ));
-    }
-
-    let mut values = Vec::with_capacity(output_float_count);
-    for i in 0..output_float_count {
-        let offset = i * std::mem::size_of::<f32>();
-        let bytes: [u8; 4] = result[offset..offset + 4].try_into().unwrap();
-        values.push(f32::from_le_bytes(bytes));
-    }
-
-    let count = values[0] as usize;
-    if count > MAX_PARCEL_INTERVALS {
-        return Err(format!(
-            "shader reported {} intervals, expected at most {}",
-            count, MAX_PARCEL_INTERVALS
-        ));
-    }
-
-    let mut intervals = Vec::with_capacity(count);
-    for i in 0..count {
-        let base = 1 + 3 * i;
-        intervals.push((values[base], values[base + 1], values[base + 2] as i32));
-    }
-
-    Ok(intervals)
-}
+interval_test_node!(
+    IntersectParcelsTester,
+    CONTEXT,
+    TEST_SHADER_PATH,
+    TEST_CASES
+);

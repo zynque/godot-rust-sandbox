@@ -1,0 +1,37 @@
+// ---------------------------------------------------------------------------
+// Shared scaffolding for the isolated parcel_renderer compute tests.
+//
+// A test shader includes the parcel_renderer dependencies it needs, then this
+// file, then decodes its own input from input_data and hands the result to
+// write_intervals().
+//
+// NOTE: Godot's GLSL importer only expands #include directives found in the
+// top-level .glsl file, so this file must not include anything itself. It is
+// included last so the structs it uses are already defined.
+//
+// Input (binding 0): a flat float array read by the test.
+// Output (binding 1): [size, then entry, exit, parcel_index per interval]
+// ---------------------------------------------------------------------------
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) buffer InputBuffer {
+    float input_data[];
+};
+
+layout(set = 0, binding = 1, std430) buffer OutputBuffer {
+    float output_data[];
+};
+
+// Writes an interval list as [size, then entry/exit/parcel_index per interval].
+void write_intervals(ParcelIntervals intervals) {
+    output_data[0] = float(intervals.size);
+    uint cursor = 1u;
+    for (uint i = 0u; i < intervals.size; i++) {
+        ParcelInterval interval = intervals.items[i];
+        output_data[cursor] = interval.entry;
+        output_data[cursor + 1u] = interval.exit;
+        output_data[cursor + 2u] = float(interval.parcel_index);
+        cursor += 3u;
+    }
+}
