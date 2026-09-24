@@ -71,3 +71,40 @@ uint count_overlapping_intervals(ParcelIntervals intervals) {
 
     return count;
 }
+
+ParcelIntervalCluster build_interval_cluster(ParcelIntervals intervals) {
+    ParcelIntervalCluster cluster;
+    cluster.parcels.size = intervals.size;
+    uint inflection_count = 0;
+    for(uint i = 0; i < intervals.size; i++) {
+        ParcelInterval interval = intervals.items[i];
+        cluster.inflection_points[inflection_count] = interval.entry;
+        inflection_count++;
+        cluster.inflection_points[inflection_count] = interval.exit;
+        inflection_count++;
+        cluster.parcels.indices[i] = uint(interval.parcel_index);
+    }
+    cluster.size = inflection_count;
+    return cluster;
+}
+
+void sort_interval_cluster(inout ParcelIntervalCluster cluster) {
+    // Simple insertion sort for the inflection points
+    for(uint i = 0; i < cluster.size; i++) {
+        float value = cluster.inflection_points[i];
+        int j = int(i) - 1;
+        while(j >= 0 && cluster.inflection_points[j] > value) {
+            cluster.inflection_points[j + 1] = cluster.inflection_points[j];
+            j--;
+        }
+        cluster.inflection_points[j + 1] = value;
+    }
+}
+
+void search_interval_cluster(ParcelIntervalCluster cluster) {
+    
+}
+
+float estimate_surface(ParcelIntervals intervals, uint overlapping) {
+    return 0.0;
+}

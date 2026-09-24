@@ -2,8 +2,8 @@
 // Shared scaffolding for the isolated parcel_renderer compute tests.
 //
 // A test shader includes the parcel_renderer dependencies it needs, then this
-// file, then decodes its own input from input_data and hands the result to
-// write_intervals().
+// file, then decodes its own input from input_data and writes its result to
+// output_data, either via a helper here or directly.
 //
 // NOTE: Godot's GLSL importer only expands #include directives found in the
 // top-level .glsl file, so this file must not include anything itself. It is
@@ -33,5 +33,22 @@ void write_intervals(ParcelIntervals intervals) {
         output_data[cursor + 1u] = interval.exit;
         output_data[cursor + 2u] = float(interval.parcel_index);
         cursor += 3u;
+    }
+}
+
+// Writes a cluster as [size, parcels.size, then the inflection points, then
+// the parcel indices].
+void write_interval_cluster(ParcelIntervalCluster cluster) {
+    output_data[0] = float(cluster.size);
+    output_data[1] = float(cluster.parcels.size);
+
+    uint cursor = 2u;
+    for (uint i = 0u; i < cluster.size; i++) {
+        output_data[cursor] = cluster.inflection_points[i];
+        cursor++;
+    }
+    for (uint i = 0u; i < cluster.parcels.size; i++) {
+        output_data[cursor] = float(cluster.parcels.indices[i]);
+        cursor++;
     }
 }

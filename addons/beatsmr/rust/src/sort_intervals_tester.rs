@@ -1,7 +1,8 @@
 use godot::prelude::*;
 
 use crate::parcel_test_common::{
-    Interval, IntervalCase, MAX_PARCEL_INTERVALS, interval_test_node,
+    Interval, MAX_PARCEL_INTERVALS, ParcelCase, decode_intervals, interval_output_floats,
+    parcel_test_node, verify_intervals,
 };
 
 // ---------------------------------------------------------------------------
@@ -74,7 +75,7 @@ const TEST_CASES: &[TestCase] = &[
     },
 ];
 
-impl IntervalCase for TestCase {
+impl ParcelCase for TestCase {
     fn label(&self) -> &'static str {
         self.label
     }
@@ -96,9 +97,13 @@ impl IntervalCase for TestCase {
         Ok(data)
     }
 
-    fn expected(&self) -> &'static [Interval] {
-        self.expected
+    fn output_floats(&self) -> usize {
+        interval_output_floats()
+    }
+
+    fn verify(&self, output: &[f32]) -> Result<(), String> {
+        verify_intervals(&decode_intervals(output)?, self.expected)
     }
 }
 
-interval_test_node!(SortIntervalsTester, CONTEXT, TEST_SHADER_PATH, TEST_CASES);
+parcel_test_node!(SortIntervalsTester, CONTEXT, TEST_SHADER_PATH, TEST_CASES);

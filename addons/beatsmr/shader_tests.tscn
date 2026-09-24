@@ -8,3 +8,7 @@ script = ExtResource("1_runner")
 [node name="IntersectParcelsTester" type="IntersectParcelsTester" parent="."]
 
 [node name="SortIntervalsTester" type="SortIntervalsTester" parent="."]
+
+[node name="BuildIntervalClusterTester" type="BuildIntervalClusterTester" parent="."]
+
+[node name="SortIntervalClusterTester" type="SortIntervalClusterTester" parent="."]

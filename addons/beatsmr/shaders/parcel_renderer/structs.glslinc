@@ -59,19 +59,7 @@ struct ParcelIntervals {
 };
 
 struct ParcelIntervalCluster {
-    uint start; // index of the first interval in the cluster
-    uint count;
-    float enter;
-    float exit;
-};
-
-struct ParcelIntervalClusterSet {
-    ParcelInterval[MAX_CANDIDATES] intervals;
-    ParcelIntervalCluster[MAX_CANDIDATES] clusters;
-    int size;
-};
-
-struct Range {
-    uint start;
+    float[MAX_PARCELS] inflection_points;
+    ParcelSet parcels;
     uint size;
 };
