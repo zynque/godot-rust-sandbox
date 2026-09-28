@@ -9,6 +9,12 @@ script = ExtResource("1_runner")
 
 [node name="SortIntervalsTester" type="SortIntervalsTester" parent="."]
 
+[node name="CountOverlappingIntervalsTester" type="CountOverlappingIntervalsTester" parent="."]
+
 [node name="BuildIntervalClusterTester" type="BuildIntervalClusterTester" parent="."]
 
 [node name="SortIntervalClusterTester" type="SortIntervalClusterTester" parent="."]
+
+[node name="MakeIntervalBucketsTester" type="MakeIntervalBucketsTester" parent="."]
+
+[node name="UpdateIntervalBucketWeightsTester" type="UpdateIntervalBucketWeightsTester" parent="."]

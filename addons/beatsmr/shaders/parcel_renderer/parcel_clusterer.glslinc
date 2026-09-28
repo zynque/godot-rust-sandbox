@@ -57,21 +57,26 @@ bool intervals_overlap(ParcelInterval i1, ParcelInterval i2) {
     return i2.entry < i1.exit;
 }
 
-// Scans the sorted set of intervals from left to right and counts
-// the first contiguous sequence of overlapping intervals
-uint count_overlapping_intervals(ParcelIntervals intervals) {
-    if(intervals.size <= 1)
-        return intervals.size;
-    
-    uint count = 1;
-    while(count < intervals.size &&
-          intervals_overlap(intervals.items[count-1], intervals.items[count])
-        )
+// Scans the sorted set of intervals from start_index to the right and counts
+// the first contiguous sequence of intervals that each overlap their
+// successor. Returns zero when start_index lies outside the set.
+uint count_overlapping_intervals(ParcelIntervals intervals, uint start_index) {
+    if (start_index >= intervals.size)
+        return 0u;
+
+    uint count = 1u;
+    uint current_index = start_index;
+    while(current_index + 1u < intervals.size &&
+          intervals_overlap(intervals.items[current_index], intervals.items[current_index + 1u])
+        ) {
         count++;
+        current_index++;
+    }
 
     return count;
 }
 
+// Gather entry/exit points in a flattened list
 ParcelIntervalCluster build_interval_cluster(ParcelIntervals intervals) {
     ParcelIntervalCluster cluster;
     cluster.parcels.size = intervals.size;
@@ -88,6 +93,7 @@ ParcelIntervalCluster build_interval_cluster(ParcelIntervals intervals) {
     return cluster;
 }
 
+// Sort entry/exit (inflection) points front to back
 void sort_interval_cluster(inout ParcelIntervalCluster cluster) {
     // Simple insertion sort for the inflection points
     for(uint i = 0; i < cluster.size; i++) {
@@ -101,8 +107,95 @@ void sort_interval_cluster(inout ParcelIntervalCluster cluster) {
     }
 }
 
+// Total density contributed by every parcel in the set at world point p.
+float total_parcel_density(vec3 p, ParcelSet parcels) {
+    float density = 0.0;
+    for (uint i = 0u; i < parcels.size; i++)
+        density += parcelDensity(p, parcel_buffer[parcels.indices[i]]);
+    return density;
+}
+
+// Stratifies a cluster's intervals into INTERVAL_BUCKET_COUNT buckets spanning
+// the cluster's entry/exit extent and gives every bucket an even starting
+// weight. An empty interval list yields zeroed buckets and weights.
+ParcelIntervalBucketWeights16 make_interval_buckets(ParcelIntervals intervals) {
+    ParcelIntervalBucketWeights16 result;
+    result.parcels.size = intervals.size;
+
+    if (intervals.size == 0u) {
+        for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
+            result.buckets[i] = 0.0;
+        for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++)
+            result.weights[i] = 0.0;
+        return result;
+    }
+
+    float front = intervals.items[0u].entry;
+    float back = intervals.items[0u].exit;
+    for (uint i = 0u; i < intervals.size; i++) {
+        ParcelInterval interval = intervals.items[i];
+        result.parcels.indices[i] = uint(interval.parcel_index);
+        front = min(front, interval.entry);
+        back = max(back, interval.exit);
+    }
+
+    float span = back - front;
+    for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
+        result.buckets[i] =
+            front + span * float(i) / float(INTERVAL_BUCKET_COUNT);
+
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++)
+        result.weights[i] = 1.0 / float(INTERVAL_BUCKET_COUNT);
+
+    return result;
+}
+
+// Index of the bucket containing t, or -1 when t lies outside the buckets.
+// Buckets are half open, except the last which includes its far boundary.
+int find_interval_bucket(float boundaries[INTERVAL_BUCKET_POINTS], float t) {
+    for (uint i = 0u; i < uint(INTERVAL_BUCKET_COUNT); i++) {
+        bool is_last = i == uint(INTERVAL_BUCKET_COUNT - 1);
+        bool inside = t >= boundaries[i]
+            && (t < boundaries[i + 1u]
+                || (is_last && t <= boundaries[i + 1u]));
+        if (inside)
+            return int(i);
+    }
+    return -1;
+}
+
+// Scales the bucket holding each interval midpoint by the total density
+// observed there, then normalizes the weights to sum to one. Buckets that
+// receive no observation keep their even starting weight.
+void update_interval_bucket_weights(
+    inout ParcelIntervalBucketWeights16 buckets,
+    ParcelIntervals intervals,
+    Ray ray
+) {
+    for (uint i = 0u; i < intervals.size; i++) {
+        ParcelInterval interval = intervals.items[i];
+        float t = 0.5 * (interval.entry + interval.exit);
+        int bucket = find_interval_bucket(buckets.buckets, t);
+        if (bucket < 0)
+            continue;
+
+        vec3 p = ray.origin + t * ray.direction;
+        buckets.weights[uint(bucket)] *= total_parcel_density(p, buckets.parcels);
+    }
+
+    float total = 0.0;
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++)
+        total += buckets.weights[i];
+
+    if (total > 0.0) {
+        for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++)
+            buckets.weights[i] /= total;
+    }
+}
+
 void search_interval_cluster(ParcelIntervalCluster cluster) {
-    
+    // scan the sorted inflection points and the midpoints between them to find the first
+    // region where the density threshold is exceeded
 }
 
 float estimate_surface(ParcelIntervals intervals, uint overlapping) {

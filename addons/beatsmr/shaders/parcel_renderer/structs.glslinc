@@ -63,3 +63,12 @@ struct ParcelIntervalCluster {
     ParcelSet parcels;
     uint size;
 };
+
+struct ParcelIntervalBucketWeights16 {
+    // positions along ray ordered front to back
+    // each pair of consecutive positions define a bucket
+    // note length is 1 more than the number of buckets
+    float[INTERVAL_BUCKET_POINTS] buckets;
+    float[INTERVAL_BUCKET_COUNT] weights;
+    ParcelSet parcels;
+};

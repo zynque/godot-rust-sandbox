@@ -14,3 +14,8 @@
 #define MAX_PARCEL_INTERVALS MAX_PARCELS
 
 #define MAX_PARCELS_PER_BATCH 100
+
+// ParcelIntervalBucketWeights16 stratifies a cluster into this many buckets
+// using one more boundary position than there are buckets.
+#define INTERVAL_BUCKET_COUNT 16
+#define INTERVAL_BUCKET_POINTS 17

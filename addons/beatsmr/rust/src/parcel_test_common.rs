@@ -222,6 +222,71 @@ pub fn verify_interval_cluster(
     }
 }
 
+/// Mirrors INTERVAL_BUCKET_COUNT in constants.glslinc.
+pub const INTERVAL_BUCKET_COUNT: usize = 16;
+/// Mirrors INTERVAL_BUCKET_POINTS: one boundary position per bucket plus one.
+pub const INTERVAL_BUCKET_POINTS: usize = INTERVAL_BUCKET_COUNT + 1;
+
+/// The parts of a `ParcelIntervalBucketWeights16` the tests inspect.
+#[derive(Debug, Clone)]
+pub struct BucketWeights {
+    /// buckets.parcels.size: the number of parcel indices.
+    pub parcel_count: u32,
+    /// buckets.buckets[0 .. INTERVAL_BUCKET_POINTS), rising front to back.
+    pub buckets: Vec<f32>,
+    /// buckets.weights[0 .. INTERVAL_BUCKET_COUNT).
+    pub weights: Vec<f32>,
+    /// buckets.parcels.indices[0 .. parcel_count).
+    pub parcel_indices: Vec<u32>,
+}
+
+/// Floats a bucket weights shader writes to binding 1: the parcel count, then
+/// the bucket positions, then the weights, then the parcel indices. The parcel
+/// set is sized MAX_PARCELS in structs.glslinc.
+pub fn bucket_weights_output_floats() -> usize {
+    1 + INTERVAL_BUCKET_POINTS + INTERVAL_BUCKET_COUNT + MAX_PARCEL_INTERVALS
+}
+
+pub fn decode_bucket_weights(values: &[f32]) -> Result<BucketWeights, String> {
+    let parcel_count = values[0] as usize;
+    if parcel_count > MAX_PARCEL_INTERVALS {
+        return Err(format!(
+            "shader reported {} parcels, expected at most {}",
+            parcel_count, MAX_PARCEL_INTERVALS
+        ));
+    }
+
+    let buckets_start = 1;
+    let weights_start = buckets_start + INTERVAL_BUCKET_POINTS;
+    let indices_start = weights_start + INTERVAL_BUCKET_COUNT;
+
+    Ok(BucketWeights {
+        parcel_count: parcel_count as u32,
+        buckets: values[buckets_start..weights_start].to_vec(),
+        weights: values[weights_start..indices_start].to_vec(),
+        parcel_indices: values[indices_start..indices_start + parcel_count]
+            .iter()
+            .map(|value| *value as u32)
+            .collect(),
+    })
+}
+
+pub fn verify_bucket_weights(
+    actual: &BucketWeights,
+    expected: &BucketWeights,
+) -> Result<(), String> {
+    let matches = actual.parcel_count == expected.parcel_count
+        && actual.parcel_indices == expected.parcel_indices
+        && floats_match(&actual.buckets, &expected.buckets)
+        && floats_match(&actual.weights, &expected.weights);
+
+    if matches {
+        Ok(())
+    } else {
+        Err(format!("expected: {:?}\n  got:      {:?}", expected, actual))
+    }
+}
+
 fn floats_match(actual: &[f32], expected: &[f32]) -> bool {
     actual.len() == expected.len()
         && actual
