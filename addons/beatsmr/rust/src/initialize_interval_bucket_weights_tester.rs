@@ -7,9 +7,9 @@ use crate::parcel_test_common::{
 };
 
 // ---------------------------------------------------------------------------
-// UpdateIntervalBucketWeightsTester
+// InitializeIntervalBucketWeightsTester
 //
-// Compiles the isolated update_interval_bucket_weights() compute shader,
+// Compiles the isolated initialize_interval_bucket_weights() compute shader,
 // uploads a ray, a parcel buffer and a set of overlapping intervals, dispatches
 // a single work-group, and verifies that each interval midpoint scales its
 // bucket by the total density observed there before the weights are
@@ -17,8 +17,8 @@ use crate::parcel_test_common::{
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/update_interval_bucket_weights_test.glsl";
-const CONTEXT: &str = "UpdateIntervalBucketWeightsTester";
+    "res://addons/beatsmr/shaders/parcel_renderer/initialize_interval_bucket_weights_test.glsl";
+const CONTEXT: &str = "InitializeIntervalBucketWeightsTester";
 
 /// Mirrors MAX_PARCELS in constants.glslinc.
 const MAX_PARCELS: usize = 100;
@@ -161,7 +161,7 @@ fn find_bucket(buckets: &[f32], t: f32) -> Option<usize> {
     None
 }
 
-/// The buckets `update_interval_bucket_weights()` should produce for a case.
+/// The buckets `initialize_interval_bucket_weights()` should produce for a case.
 fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let parcel_indices: Vec<u32> = case
         .intervals
@@ -282,7 +282,7 @@ impl ParcelCase for TestCase {
 }
 
 parcel_test_node!(
-    UpdateIntervalBucketWeightsTester,
+    InitializeIntervalBucketWeightsTester,
     CONTEXT,
     TEST_SHADER_PATH,
     TEST_CASES

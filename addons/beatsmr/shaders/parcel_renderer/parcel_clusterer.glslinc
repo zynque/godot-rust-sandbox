@@ -164,10 +164,11 @@ int find_interval_bucket(float boundaries[INTERVAL_BUCKET_POINTS], float t) {
     return -1;
 }
 
-// Scales the bucket holding each interval midpoint by the total density
-// observed there, then normalizes the weights to sum to one. Buckets that
-// receive no observation keep their even starting weight.
-void update_interval_bucket_weights(
+// Seeds the bucket weights from the interval midpoints, which are a first step
+// to identify buckets of interest: the bucket holding each midpoint is scaled
+// by the total density observed there, then the weights are normalized to sum
+// to one. Buckets that receive no observation keep their even starting weight.
+void initialize_interval_bucket_weights(
     inout ParcelIntervalBucketWeights16 buckets,
     ParcelIntervals intervals,
     Ray ray

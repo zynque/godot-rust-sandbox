@@ -2,7 +2,7 @@
 #version 450
 
 // ---------------------------------------------------------------------------
-// Isolated harness for update_interval_bucket_weights() from
+// Isolated harness for initialize_interval_bucket_weights() from
 // parcel_clusterer.glslinc.
 //
 // The host uploads a ray, a parcel buffer and a list of overlapping intervals,
@@ -78,7 +78,7 @@ void main() {
     }
 
     ParcelIntervalBucketWeights16 buckets = make_interval_buckets(intervals);
-    update_interval_bucket_weights(buckets, intervals, ray);
+    initialize_interval_bucket_weights(buckets, intervals, ray);
 
     write_bucket_weights(buckets);
 }
