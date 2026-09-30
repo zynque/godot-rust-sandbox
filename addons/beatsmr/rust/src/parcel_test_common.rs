@@ -46,17 +46,35 @@ pub trait ParcelCase {
     fn verify(&self, output: &[f32]) -> Result<(), String>;
 }
 
-/// Runs every case against `shader_path` and prints a PASS/FAIL/ERROR report.
+/// How many cases a tester passed out of how many it attempted.
+#[derive(Clone, Copy)]
+pub struct TestReport {
+    pub passed: usize,
+    pub total: usize,
+}
+
+impl TestReport {
+    /// Godot facing form: x is `passed`, y is `total`.
+    pub fn to_vector2i(self) -> Vector2i {
+        Vector2i::new(self.passed as i32, self.total as i32)
+    }
+}
+
+/// Runs every case against `shader_path`, prints a PASS/FAIL/ERROR report and
+/// returns the counts.
 ///
 /// Does nothing outside the editor, where the tests are driven from a scene's
 /// tool button.
-pub fn run_cases<C: ParcelCase>(context: &str, shader_path: &str, cases: &[C]) {
+pub fn run_cases<C: ParcelCase>(context: &str, shader_path: &str, cases: &[C]) -> TestReport {
+    let total = cases.len();
+
     if !Engine::singleton().is_editor_hint() {
-        return;
+        return TestReport { passed: 0, total: 0 };
     }
 
     let Some(mut harness) = ComputeHarness::new(context, shader_path) else {
-        return;
+        godot_print!("[{}] ERROR could not run any of the {} cases.", context, total);
+        return TestReport { passed: 0, total };
     };
 
     let mut passed = 0usize;
@@ -86,10 +104,15 @@ pub fn run_cases<C: ParcelCase>(context: &str, shader_path: &str, cases: &[C]) {
         passed,
         passed + failed
     );
+
+    TestReport {
+        passed,
+        total: passed + failed,
+    }
 }
 
 /// Declares the tool node for a shader test: a `#[class]` Node whose
-/// `run_tests` method drives `run_cases`.
+/// `run_tests` method drives `run_cases` and returns its counts.
 macro_rules! parcel_test_node {
     ($name:ident, $context:expr, $shader_path:expr, $cases:expr) => {
         #[derive(GodotClass)]
@@ -107,9 +130,10 @@ macro_rules! parcel_test_node {
 
         #[godot_api]
         impl $name {
+            /// Runs the cases and returns (passed, total).
             #[func]
-            fn run_tests(&mut self) {
-                $crate::parcel_test_common::run_cases($context, $shader_path, $cases);
+            fn run_tests(&mut self) -> godot::builtin::Vector2i {
+                $crate::parcel_test_common::run_cases($context, $shader_path, $cases).to_vector2i()
             }
         }
     };
@@ -234,17 +258,25 @@ pub struct BucketWeights {
     pub parcel_count: u32,
     /// buckets.buckets[0 .. INTERVAL_BUCKET_POINTS), rising front to back.
     pub buckets: Vec<f32>,
-    /// buckets.weights[0 .. INTERVAL_BUCKET_COUNT).
-    pub weights: Vec<f32>,
+    /// buckets.positions[0 .. INTERVAL_BUCKET_COUNT): estimated positions.
+    pub positions: Vec<f32>,
+    /// buckets.evidence[0 .. INTERVAL_BUCKET_COUNT): total evidence.
+    pub evidence: Vec<f32>,
+    /// buckets.deviations[0 .. INTERVAL_BUCKET_COUNT): weighted squared
+    /// deviations around the estimated positions.
+    pub deviations: Vec<f32>,
     /// buckets.parcels.indices[0 .. parcel_count).
     pub parcel_indices: Vec<u32>,
 }
 
 /// Floats a bucket weights shader writes to binding 1: the parcel count, then
-/// the bucket positions, then the weights, then the parcel indices. The parcel
-/// set is sized MAX_PARCELS in structs.glslinc.
+/// the bucket boundaries, then the positions, the evidence and the deviations,
+/// then the parcel indices. The parcel set is sized MAX_PARCELS in
+/// structs.glslinc.
 pub fn bucket_weights_output_floats() -> usize {
-    1 + INTERVAL_BUCKET_POINTS + INTERVAL_BUCKET_COUNT + MAX_PARCEL_INTERVALS
+    1 + INTERVAL_BUCKET_POINTS
+        + 3 * INTERVAL_BUCKET_COUNT
+        + MAX_PARCEL_INTERVALS
 }
 
 pub fn decode_bucket_weights(values: &[f32]) -> Result<BucketWeights, String> {
@@ -257,13 +289,17 @@ pub fn decode_bucket_weights(values: &[f32]) -> Result<BucketWeights, String> {
     }
 
     let buckets_start = 1;
-    let weights_start = buckets_start + INTERVAL_BUCKET_POINTS;
-    let indices_start = weights_start + INTERVAL_BUCKET_COUNT;
+    let positions_start = buckets_start + INTERVAL_BUCKET_POINTS;
+    let evidence_start = positions_start + INTERVAL_BUCKET_COUNT;
+    let deviations_start = evidence_start + INTERVAL_BUCKET_COUNT;
+    let indices_start = deviations_start + INTERVAL_BUCKET_COUNT;
 
     Ok(BucketWeights {
         parcel_count: parcel_count as u32,
-        buckets: values[buckets_start..weights_start].to_vec(),
-        weights: values[weights_start..indices_start].to_vec(),
+        buckets: values[buckets_start..positions_start].to_vec(),
+        positions: values[positions_start..evidence_start].to_vec(),
+        evidence: values[evidence_start..deviations_start].to_vec(),
+        deviations: values[deviations_start..indices_start].to_vec(),
         parcel_indices: values[indices_start..indices_start + parcel_count]
             .iter()
             .map(|value| *value as u32)
@@ -278,7 +314,9 @@ pub fn verify_bucket_weights(
     let matches = actual.parcel_count == expected.parcel_count
         && actual.parcel_indices == expected.parcel_indices
         && floats_match(&actual.buckets, &expected.buckets)
-        && floats_match(&actual.weights, &expected.weights);
+        && floats_match(&actual.positions, &expected.positions)
+        && floats_match(&actual.evidence, &expected.evidence)
+        && floats_match(&actual.deviations, &expected.deviations);
 
     if matches {
         Ok(())

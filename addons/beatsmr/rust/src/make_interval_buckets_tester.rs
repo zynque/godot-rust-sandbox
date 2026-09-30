@@ -11,7 +11,8 @@ use crate::parcel_test_common::{
 //
 // Compiles the isolated make_interval_buckets() compute shader, uploads a list
 // of overlapping intervals, dispatches a single work-group, and verifies that
-// the buckets span the cluster evenly and start evenly weighted.
+// the buckets span the cluster evenly and start with empty estimates centred on
+// each bucket.
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
@@ -55,7 +56,7 @@ fn expected_buckets(intervals: &[Interval]) -> BucketWeights {
         .collect();
 
     let mut buckets = vec![0.0f32; INTERVAL_BUCKET_POINTS];
-    let mut weights = vec![0.0f32; INTERVAL_BUCKET_COUNT];
+    let mut positions = vec![0.0f32; INTERVAL_BUCKET_COUNT];
 
     if let Some((first_entry, first_exit, _)) = intervals.first() {
         let mut front = *first_entry;
@@ -69,15 +70,17 @@ fn expected_buckets(intervals: &[Interval]) -> BucketWeights {
         for (i, bucket) in buckets.iter_mut().enumerate() {
             *bucket = front + span * i as f32 / INTERVAL_BUCKET_COUNT as f32;
         }
-        for weight in weights.iter_mut() {
-            *weight = 1.0 / INTERVAL_BUCKET_COUNT as f32;
+        for (i, position) in positions.iter_mut().enumerate() {
+            *position = 0.5 * (buckets[i] + buckets[i + 1]);
         }
     }
 
     BucketWeights {
         parcel_count: intervals.len() as u32,
         buckets,
-        weights,
+        positions,
+        evidence: vec![0.0; INTERVAL_BUCKET_COUNT],
+        deviations: vec![0.0; INTERVAL_BUCKET_COUNT],
         parcel_indices,
     }
 }

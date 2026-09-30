@@ -53,8 +53,9 @@ void write_interval_cluster(ParcelIntervalCluster cluster) {
     }
 }
 
-// Writes bucket weights as [parcels.size, then the bucket positions, then the
-// weights, then the parcel indices].
+// Writes bucket estimates as [parcels.size, then the bucket boundaries, then
+// the positions, the evidence and the deviations per bucket, then the parcel
+// indices].
 void write_bucket_weights(ParcelIntervalBucketWeights16 buckets) {
     output_data[0] = float(buckets.parcels.size);
 
@@ -64,7 +65,15 @@ void write_bucket_weights(ParcelIntervalBucketWeights16 buckets) {
         cursor++;
     }
     for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        output_data[cursor] = buckets.weights[i];
+        output_data[cursor] = buckets.positions[i];
+        cursor++;
+    }
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        output_data[cursor] = buckets.evidence[i];
+        cursor++;
+    }
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        output_data[cursor] = buckets.deviations[i];
         cursor++;
     }
     for (uint i = 0u; i < buckets.parcels.size; i++) {

@@ -69,6 +69,13 @@ struct ParcelIntervalBucketWeights16 {
     // each pair of consecutive positions define a bucket
     // note length is 1 more than the number of buckets
     float[INTERVAL_BUCKET_POINTS] buckets;
-    float[INTERVAL_BUCKET_COUNT] weights;
+    // Per bucket, estimated from the density observations inside it:
+    // positions[] is where that density is estimated to sit along the ray,
+    // evidence[] the total weight behind the estimate (the sum of the squared
+    // densities observed) and deviations[] the accumulated weighted squared
+    // deviation around positions[].
+    float[INTERVAL_BUCKET_COUNT] positions;
+    float[INTERVAL_BUCKET_COUNT] evidence;
+    float[INTERVAL_BUCKET_COUNT] deviations;
     ParcelSet parcels;
 };

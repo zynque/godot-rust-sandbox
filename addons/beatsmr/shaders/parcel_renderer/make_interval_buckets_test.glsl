@@ -5,8 +5,8 @@
 // Isolated harness for make_interval_buckets() from parcel_clusterer.glslinc.
 //
 // The host uploads a list of parcel intervals and checks the evenly spaced
-// bucket boundaries and even starting weights that make_interval_buckets()
-// derives from them.
+// bucket boundaries and the empty estimates centred on each bucket that
+// make_interval_buckets() derives from them.
 //
 // Input (binding 0), a flat float array:
 //   [0]       interval count

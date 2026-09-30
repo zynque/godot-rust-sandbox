@@ -5,3 +5,4 @@ Policy note:
 - Prefer the minimal durable solution needed for the requested outcome.
 - Prefer small files with a single responsibility, ideally under 100 lines when practical.
 - Prefer fail-fast behavior over fallbacks or best-effort logic: when required state is missing or invalid, stop and surface a clear error immediately.
+- Never create or hand-edit Godot `uid` files. Leave them missing; the user will open the project in Godot and let them be generated automatically.

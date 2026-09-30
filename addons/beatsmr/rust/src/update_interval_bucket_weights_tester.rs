@@ -7,21 +7,25 @@ use crate::parcel_test_common::{
 };
 
 // ---------------------------------------------------------------------------
-// InitializeIntervalBucketWeightsTester
+// UpdateIntervalBucketWeightsTester
 //
-// Compiles the isolated initialize_interval_bucket_weights() compute shader,
-// uploads a ray, a parcel buffer and a set of overlapping intervals, dispatches
-// a single work-group, and verifies that each interval midpoint becomes the
-// estimated position of its bucket, carrying the squared density observed
-// there as its evidence.
+// Compiles the isolated update_interval_bucket_weights() compute shader,
+// uploads a ray, a parcel buffer, a set of overlapping intervals and a seed,
+// dispatches a single work-group, and verifies that every bucket sampled the
+// ray at a random position inside itself and folded the observed density, with
+// its squared value as weight, into its position, evidence and deviation.
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/initialize_interval_bucket_weights_test.glsl";
-const CONTEXT: &str = "InitializeIntervalBucketWeightsTester";
+    "res://addons/beatsmr/shaders/parcel_renderer/update_interval_bucket_weights_test.glsl";
+const CONTEXT: &str = "UpdateIntervalBucketWeightsTester";
 
 /// Mirrors MAX_PARCELS in constants.glslinc.
 const MAX_PARCELS: usize = 100;
+
+/// This tester draws the bucket sample positions with hash_to_unit_float() from
+/// parcel_clusterer.glslinc, so the seeds are mixed the same way here.
+const HASH_MULTIPLIER: u32 = 0x9e3779b9;
 
 /// The subset of `Parcel` the density evaluation reads. All test parcels are
 /// axis aligned, so `inverse_variance` is the diagonal of the inverse
@@ -45,32 +49,9 @@ const fn parcel(mean: [f32; 3], inverse_variance: [f32; 3], peak_density: f32) -
 /// its mean and observes exactly `peak_density` at the mean.
 const UNIT_PARCEL_AT_Z_10: TestParcel = parcel([0.0, 0.0, 10.0], [1.0, 1.0, 1.0], 0.8);
 const UNIT_PARCEL_AT_Z_6: TestParcel = parcel([0.0, 0.0, 6.0], [1.0, 1.0, 1.0], 0.4);
-const UNIT_PARCEL_AT_HALF: TestParcel = parcel([0.0, 0.0, 0.5], [1.0, 1.0, 1.0], 0.4);
 const EMPTY_PARCEL_AT_Z_10: TestParcel = parcel([0.0, 0.0, 10.0], [1.0, 1.0, 1.0], 0.0);
-const ZERO_PARCEL: TestParcel = parcel([0.0, 0.0, 0.0], [1.0, 1.0, 1.0], 0.0);
 const BRIGHT_PARCEL_AT_Z_5: TestParcel = parcel([0.0, 0.0, 5.0], [1.0, 1.0, 1.0], 0.8);
 const DIM_PARCEL_AT_Z_10: TestParcel = parcel([0.0, 0.0, 10.0], [1.0, 1.0, 1.0], 0.4);
-
-/// Sixteen intervals whose midpoints (1, 3, ... 31) land one per bucket, so
-/// every bucket sees a zero density observation and no bucket gains evidence.
-const ALL_BUCKETS_ZERO_DENSITY: &[Interval] = &[
-    (0.0, 2.0, 0),
-    (2.0, 4.0, 0),
-    (4.0, 6.0, 0),
-    (6.0, 8.0, 0),
-    (8.0, 10.0, 0),
-    (10.0, 12.0, 0),
-    (12.0, 14.0, 0),
-    (14.0, 16.0, 0),
-    (16.0, 18.0, 0),
-    (18.0, 20.0, 0),
-    (20.0, 22.0, 0),
-    (22.0, 24.0, 0),
-    (24.0, 26.0, 0),
-    (26.0, 28.0, 0),
-    (28.0, 30.0, 0),
-    (30.0, 32.0, 0),
-];
 
 struct TestCase {
     label: &'static str,
@@ -79,6 +60,7 @@ struct TestCase {
     parcels: &'static [TestParcel],
     /// (entry, exit, parcel_index) per interval, in upload order.
     intervals: &'static [Interval],
+    seed: u32,
 }
 
 const TEST_CASES: &[TestCase] = &[
@@ -88,50 +70,60 @@ const TEST_CASES: &[TestCase] = &[
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[],
         intervals: &[],
+        seed: 0,
     },
     TestCase {
-        label: "midpoint at the parcel mean observes the peak density",
+        label: "samples a bucket that spans the parcel",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[UNIT_PARCEL_AT_Z_10],
         intervals: &[(7.0, 13.0, 0)],
+        seed: 1,
     },
     TestCase {
-        label: "two midpoints seed two buckets",
-        ray_origin: [0.0, 0.0, 0.0],
-        ray_direction: [0.0, 0.0, 1.0],
-        parcels: &[UNIT_PARCEL_AT_Z_10, UNIT_PARCEL_AT_Z_6],
-        intervals: &[(7.0, 13.0, 0), (3.0, 9.0, 1)],
-    },
-    TestCase {
-        label: "two midpoints in the same bucket keep the last",
-        ray_origin: [0.0, 0.0, 0.0],
-        ray_direction: [0.0, 0.0, 1.0],
-        parcels: &[UNIT_PARCEL_AT_HALF, BRIGHT_PARCEL_AT_Z_5],
-        intervals: &[(0.0, 1.0, 0), (0.0, 1.0, 1)],
-    },
-    TestCase {
-        label: "zero observed density seeds no evidence",
+        label: "zero density leaves every bucket empty",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[EMPTY_PARCEL_AT_Z_10],
         intervals: &[(7.0, 13.0, 0)],
+        seed: 1,
     },
     TestCase {
-        label: "midpoint on the far boundary lands in the last bucket",
+        label: "two parcels with two overlapping intervals",
+        ray_origin: [0.0, 0.0, 0.0],
+        ray_direction: [0.0, 0.0, 1.0],
+        parcels: &[UNIT_PARCEL_AT_Z_10, UNIT_PARCEL_AT_Z_6],
+        intervals: &[(7.0, 13.0, 0), (3.0, 9.0, 1)],
+        seed: 1,
+    },
+    TestCase {
+        label: "another seed draws other positions",
+        ray_origin: [0.0, 0.0, 0.0],
+        ray_direction: [0.0, 0.0, 1.0],
+        parcels: &[UNIT_PARCEL_AT_Z_10, UNIT_PARCEL_AT_Z_6],
+        intervals: &[(7.0, 13.0, 0), (3.0, 9.0, 1)],
+        seed: 7,
+    },
+    TestCase {
+        label: "unsorted input keeps its order",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[BRIGHT_PARCEL_AT_Z_5, DIM_PARCEL_AT_Z_10],
-        intervals: &[(0.0, 10.0, 0), (10.0, 10.0, 1)],
-    },
-    TestCase {
-        label: "every bucket observes zero density",
-        ray_origin: [0.0, 0.0, 0.0],
-        ray_direction: [0.0, 0.0, 1.0],
-        parcels: &[ZERO_PARCEL],
-        intervals: ALL_BUCKETS_ZERO_DENSITY,
+        intervals: &[(10.0, 14.0, 1), (0.0, 12.0, 0)],
+        seed: 3,
     },
 ];
+
+/// Mirrors hash_to_unit_float() in parcel_clusterer.glslinc. GLSL uint
+/// multiplication wraps at 32 bits, so the mix wraps here too.
+fn hash_to_unit_float(mut value: u32) -> f32 {
+    value = (value ^ 61) ^ (value >> 16);
+    value = value.wrapping_mul(9);
+    value ^= value >> 4;
+    value = value.wrapping_mul(0x27d4_eb2d);
+    value ^= value >> 15;
+    value as f32 / 4_294_967_296.0
+}
 
 /// Total density the shader should observe at point `p`.
 fn total_density(p: [f32; 3], parcels: &[TestParcel], indices: &[u32]) -> f32 {
@@ -149,19 +141,9 @@ fn total_density(p: [f32; 3], parcels: &[TestParcel], indices: &[u32]) -> f32 {
     density
 }
 
-/// Index of the bucket containing `t`, mirroring find_interval_bucket().
-fn find_bucket(buckets: &[f32], t: f32) -> Option<usize> {
-    for i in 0..INTERVAL_BUCKET_COUNT {
-        let is_last = i == INTERVAL_BUCKET_COUNT - 1;
-        let inside = t >= buckets[i] && (t < buckets[i + 1] || (is_last && t <= buckets[i + 1]));
-        if inside {
-            return Some(i);
-        }
-    }
-    None
-}
-
-/// The buckets `initialize_interval_bucket_weights()` should produce for a case.
+/// The buckets `update_interval_bucket_weights()` should produce for a case:
+/// the empty buckets of make_interval_buckets(), then one density observation
+/// per bucket folded into its estimate.
 fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let parcel_indices: Vec<u32> = case
         .intervals
@@ -172,6 +154,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let mut buckets = vec![0.0f32; INTERVAL_BUCKET_POINTS];
     let mut positions = vec![0.0f32; INTERVAL_BUCKET_COUNT];
     let mut evidence = vec![0.0f32; INTERVAL_BUCKET_COUNT];
+    let mut deviations = vec![0.0f32; INTERVAL_BUCKET_COUNT];
 
     if let Some((first_entry, first_exit, _)) = case.intervals.first() {
         let mut front = *first_entry;
@@ -189,12 +172,10 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
             *position = 0.5 * (buckets[i] + buckets[i + 1]);
         }
 
-        for (entry, exit, _) in case.intervals {
-            let t = 0.5 * (entry + exit);
-            let Some(bucket) = find_bucket(&buckets, t) else {
-                continue;
-            };
-
+        for i in 0..INTERVAL_BUCKET_COUNT {
+            let mixed = case.seed.wrapping_mul(HASH_MULTIPLIER).wrapping_add(i as u32);
+            let pick = hash_to_unit_float(mixed);
+            let t = buckets[i] + (buckets[i + 1] - buckets[i]) * pick;
             let p = [
                 case.ray_origin[0] + t * case.ray_direction[0],
                 case.ray_origin[1] + t * case.ray_direction[1],
@@ -202,8 +183,17 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
             ];
             let density = total_density(p, case.parcels, &parcel_indices);
 
-            positions[bucket] = t;
-            evidence[bucket] = density * density;
+            let w = density * density;
+            if w <= 0.0 {
+                continue;
+            }
+
+            let total = evidence[i] + w;
+            let delta = t - positions[i];
+            let position = positions[i] + (w / total) * delta;
+            positions[i] = position;
+            evidence[i] = total;
+            deviations[i] += w * delta * (t - position);
         }
     }
 
@@ -212,7 +202,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
         buckets,
         positions,
         evidence,
-        deviations: vec![0.0; INTERVAL_BUCKET_COUNT],
+        deviations,
         parcel_indices,
     }
 }
@@ -265,6 +255,8 @@ impl ParcelCase for TestCase {
             data.extend_from_slice(&[*entry, *exit, *parcel_index as f32]);
         }
 
+        data.push(self.seed as f32);
+
         Ok(data)
     }
 
@@ -281,7 +273,7 @@ impl ParcelCase for TestCase {
 }
 
 parcel_test_node!(
-    InitializeIntervalBucketWeightsTester,
+    UpdateIntervalBucketWeightsTester,
     CONTEXT,
     TEST_SHADER_PATH,
     TEST_CASES
