@@ -2,13 +2,14 @@
 #version 450
 
 // ---------------------------------------------------------------------------
-// Isolated harness for initialize_interval_bucket_weights() from
-// parcel_clusterer.glslinc.
+// Isolated harness for update_interval_bucket_weights() from
+// cluster/interval_buckets.glslinc.
 //
-// The host uploads a ray, a parcel buffer and a list of overlapping intervals,
-// then checks the bucket estimates after each interval midpoint seeds the
-// bucket that contains it with its own position and the squared density
-// observed there.
+// The host uploads a ray, a parcel buffer, a list of overlapping intervals and
+// a seed, then checks the bucket estimates after one refining pass: every
+// bucket draws a random position inside itself, samples the total density at
+// the matching ray point and folds that observation, weighted by its squared
+// density, into its estimate.
 //
 // Input (binding 0), a flat float array:
 //   [0 .. 3)  ray.origin
@@ -18,6 +19,7 @@
 //   the peak density
 //   then the interval count, followed by entry, exit and parcel_index per
 //   interval
+//   then the seed
 //
 // Output (binding 1): see write_bucket_weights() in test_harness.glslinc.
 // ---------------------------------------------------------------------------
@@ -26,12 +28,14 @@
 // before including parcel_math.glslinc.
 vec3 iResolution = vec3(1.0);
 
-#include "res://addons/beatsmr/shaders/parcel_renderer/constants.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/structs.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/globals.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/parcel_math.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/parcel_clusterer.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/test_harness.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/constants.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/structs.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/globals.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/parcel_intervals.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_cluster.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_buckets.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/tests/test_harness.glslinc"
 
 const uint PARCEL_STRIDE = 13u;
 
@@ -78,8 +82,10 @@ void main() {
         cursor += 3u;
     }
 
+    uint seed = uint(input_data[cursor]);
+
     ParcelIntervalBucketWeights16 buckets = make_interval_buckets(intervals);
-    initialize_interval_bucket_weights(buckets, intervals, ray);
+    update_interval_bucket_weights(buckets, ray, seed);
 
     write_bucket_weights(buckets);
 }

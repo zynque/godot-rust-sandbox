@@ -3,7 +3,7 @@
 
 // ---------------------------------------------------------------------------
 // Isolated harness for count_overlapping_intervals() from
-// parcel_clusterer.glslinc.
+// cluster/parcel_intervals.glslinc.
 //
 // The host uploads a set of intervals sorted by entry plus a start index and
 // checks how many consecutive intervals from that index each overlap their
@@ -22,12 +22,14 @@
 // before including parcel_math.glslinc.
 vec3 iResolution = vec3(1.0);
 
-#include "res://addons/beatsmr/shaders/parcel_renderer/constants.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/structs.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/globals.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/parcel_math.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/parcel_clusterer.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/test_harness.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/constants.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/structs.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/globals.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/parcel_intervals.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_cluster.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_buckets.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/tests/test_harness.glslinc"
 
 void main() {
     uint cursor = 0u;

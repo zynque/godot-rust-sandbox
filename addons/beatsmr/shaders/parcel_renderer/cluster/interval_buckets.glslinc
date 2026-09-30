@@ -1,0 +1,147 @@
+// Total density contributed by every parcel in the set at world point p.
+float total_parcel_density(vec3 p, ParcelSet parcels) {
+    float density = 0.0;
+    for (uint i = 0u; i < parcels.size; i++)
+        density += parcelDensity(p, parcel_buffer[parcels.indices[i]]);
+    return density;
+}
+
+// Stratifies a cluster's intervals into INTERVAL_BUCKET_COUNT buckets spanning
+// the cluster's entry/exit extent and gives every bucket an empty estimate
+// centred on itself: no evidence and no deviation yet. An empty interval list
+// yields zeroed buckets and estimates.
+ParcelIntervalBucketWeights16 make_interval_buckets(ParcelIntervals intervals) {
+    ParcelIntervalBucketWeights16 result;
+    result.parcels.size = intervals.size;
+
+    if (intervals.size == 0u) {
+        for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
+            result.buckets[i] = 0.0;
+        for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+            result.positions[i] = 0.0;
+            result.evidence[i] = 0.0;
+            result.deviations[i] = 0.0;
+        }
+        return result;
+    }
+
+    float front = intervals.items[0u].entry;
+    float back = intervals.items[0u].exit;
+    for (uint i = 0u; i < intervals.size; i++) {
+        ParcelInterval interval = intervals.items[i];
+        result.parcels.indices[i] = uint(interval.parcel_index);
+        front = min(front, interval.entry);
+        back = max(back, interval.exit);
+    }
+
+    float span = back - front;
+    for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
+        result.buckets[i] =
+            front + span * float(i) / float(INTERVAL_BUCKET_COUNT);
+
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        result.positions[i] = 0.5 * (result.buckets[i] + result.buckets[i + 1u]);
+        result.evidence[i] = 0.0;
+        result.deviations[i] = 0.0;
+    }
+
+    return result;
+}
+
+// Folds one density observation into a bucket's estimate. The observation at
+// position x carries a weight of its squared density, so the bucket position
+// moves towards x in proportion to the share of the new total evidence that
+// observation holds, and the deviation grows by the weighted squared distance
+// to the new position. Zero density carries no weight and changes nothing.
+void observe_bucket_density(
+    inout ParcelIntervalBucketWeights16 buckets,
+    uint index,
+    float x,
+    float density
+) {
+    float w = density * density;
+    if (w <= 0.0)
+        return;
+
+    float evidence = buckets.evidence[index] + w;
+    float delta = x - buckets.positions[index];
+    float position = buckets.positions[index] + (w / evidence) * delta;
+
+    buckets.positions[index] = position;
+    buckets.evidence[index] = evidence;
+    buckets.deviations[index] += w * delta * (x - position);
+}
+
+// Index of the bucket containing t, or -1 when t lies outside the buckets.
+// Buckets are half open, except the last which includes its far boundary.
+int find_interval_bucket(float boundaries[INTERVAL_BUCKET_POINTS], float t) {
+    for (uint i = 0u; i < uint(INTERVAL_BUCKET_COUNT); i++) {
+        bool is_last = i == uint(INTERVAL_BUCKET_COUNT - 1);
+        bool inside = t >= boundaries[i]
+            && (t < boundaries[i + 1u]
+                || (is_last && t <= boundaries[i + 1u]));
+        if (inside)
+            return int(i);
+    }
+    return -1;
+}
+
+// Seeds each bucket from the interval midpoints, a first step to identify
+// buckets of interest: the bucket holding a midpoint adopts that midpoint as
+// its estimated position and the density observed there as its evidence. The
+// deviation stays zero because a single observation tells us nothing about the
+// spread yet, and buckets that receive no midpoint keep their empty estimate.
+void initialize_interval_bucket_weights(
+    inout ParcelIntervalBucketWeights16 buckets,
+    ParcelIntervals intervals,
+    Ray ray
+) {
+    for (uint i = 0u; i < intervals.size; i++) {
+        ParcelInterval interval = intervals.items[i];
+        float t = 0.5 * (interval.entry + interval.exit);
+        int bucket = find_interval_bucket(buckets.buckets, t);
+        if (bucket < 0)
+            continue;
+
+        vec3 p = ray.origin + t * ray.direction;
+        float density = total_parcel_density(p, buckets.parcels);
+
+        uint index = uint(bucket);
+        buckets.positions[index] = t;
+        buckets.evidence[index] = density * density;
+        buckets.deviations[index] = 0.0;
+    }
+}
+
+// Repeatable value in [0, 1) hashed from `value`. Integer multiplication wraps
+// at 32 bits, which the tester mirrors with wrapping arithmetic.
+float hash_to_unit_float(uint value) {
+    value = (value ^ 61u) ^ (value >> 16u);
+    value *= 9u;
+    value = value ^ (value >> 4u);
+    value *= 0x27d4eb2du;
+    value = value ^ (value >> 15u);
+    return float(value) / 4294967296.0;
+}
+
+// Refines every bucket with one density observation. Each bucket draws a
+// random position inside itself, samples the total parcel density at the
+// matching ray point and folds the observation into its estimate, so repeated
+// passes with fresh seeds build up evidence around the density in the bucket.
+// An empty parcel set leaves the estimates untouched.
+void update_interval_bucket_weights(
+    inout ParcelIntervalBucketWeights16 buckets,
+    Ray ray,
+    uint seed
+) {
+    if (buckets.parcels.size == 0u)
+        return;
+
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        float pick = hash_to_unit_float(seed * 0x9e3779b9u + i);
+        float t = mix(buckets.buckets[i], buckets.buckets[i + 1u], pick);
+        vec3 p = ray.origin + t * ray.direction;
+        float density = total_parcel_density(p, buckets.parcels);
+        observe_bucket_density(buckets, i, t, density);
+    }
+}

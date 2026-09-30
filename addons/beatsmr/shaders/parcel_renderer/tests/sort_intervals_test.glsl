@@ -2,7 +2,8 @@
 #version 450
 
 // ---------------------------------------------------------------------------
-// Isolated harness for sort_intervals() from parcel_clusterer.glslinc.
+// Isolated harness for sort_intervals() from
+// cluster/parcel_intervals.glslinc.
 //
 // The host uploads an unsorted list of parcel intervals, then checks that
 // sort_intervals() orders them by entry point.
@@ -18,12 +19,14 @@
 // before including parcel_math.glslinc.
 vec3 iResolution = vec3(1.0);
 
-#include "res://addons/beatsmr/shaders/parcel_renderer/constants.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/structs.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/globals.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/parcel_math.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/parcel_clusterer.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/test_harness.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/constants.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/structs.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/globals.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/parcel_intervals.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_cluster.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_buckets.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/tests/test_harness.glslinc"
 
 void main() {
     uint cursor = 0u;

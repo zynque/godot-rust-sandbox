@@ -14,7 +14,7 @@ use crate::parcel_test_common::{
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/sort_intervals_test.glsl";
+    "res://addons/beatsmr/shaders/parcel_renderer/tests/sort_intervals_test.glsl";
 const CONTEXT: &str = "SortIntervalsTester";
 
 struct TestCase {

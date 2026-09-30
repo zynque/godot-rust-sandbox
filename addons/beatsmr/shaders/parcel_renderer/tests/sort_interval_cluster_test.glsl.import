@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dycpjprmgrykq"
+path="res://.godot/imported/sort_interval_cluster_test.glsl-b55eb994f4664d6e90baf0ba485bc14a.res"
+
+[deps]
+
+source_file="res://addons/beatsmr/shaders/parcel_renderer/tests/sort_interval_cluster_test.glsl"
+dest_files=["res://.godot/imported/sort_interval_cluster_test.glsl-b55eb994f4664d6e90baf0ba485bc14a.res"]
+
+[params]
+

@@ -12,7 +12,7 @@ use crate::parcel_test_common::{Interval, MAX_PARCEL_INTERVALS, ParcelCase, parc
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/count_overlapping_intervals_test.glsl";
+    "res://addons/beatsmr/shaders/parcel_renderer/tests/count_overlapping_intervals_test.glsl";
 const CONTEXT: &str = "CountOverlappingIntervalsTester";
 
 struct TestCase {

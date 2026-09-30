@@ -14,7 +14,7 @@ use crate::parcel_test_common::{
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/build_interval_cluster_test.glsl";
+    "res://addons/beatsmr/shaders/parcel_renderer/tests/build_interval_cluster_test.glsl";
 const CONTEXT: &str = "BuildIntervalClusterTester";
 
 struct TestCase {

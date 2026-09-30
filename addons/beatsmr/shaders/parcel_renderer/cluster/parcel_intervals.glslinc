@@ -1,0 +1,77 @@
+
+// For a given set of parcels, checks intersection against given ray
+// returns intervals (ray entry/exit points) for intersecting parcels
+ParcelIntervals intersect_parcels(Ray ray, ParcelSet set) {
+    ParcelIntervals intervals;
+    intervals.size = 0;
+
+    for(uint i = 0; i < set.size; i++) {
+        uint parcel_index = set.indices[i];
+        Parcel parcel = parcel_buffer[parcel_index];
+        vec2 bounds = distanceToBounds(ray, parcel, PARCEL_BOUND_SIGMAS);
+        if(bounds.x > MIN_FLOAT && bounds.y < MAX_FLOAT) {
+            ParcelInterval interval;
+            interval.entry = bounds.x;
+            interval.exit = bounds.y;
+            interval.parcel_index = int(parcel_index);
+            intervals.items[intervals.size] = interval;
+            intervals.size++;
+        }
+    }
+
+    return intervals;
+}
+
+// Insert the interval into its position in a sorted set of intervals
+// ordered by entry
+void insert_sorted(
+    inout ParcelIntervals intervals,
+    ParcelInterval interval
+) {
+    uint i = intervals.size;
+
+    while (i > 0u && interval.entry < intervals.items[i - 1u].entry) {
+        intervals.items[i] = intervals.items[i - 1u];
+        i--;
+    }
+
+    intervals.items[i] = interval;
+    intervals.size++;
+}
+
+// Sorts the set of parcel intervals by their entry point
+// using an in place insertion sort
+void sort_intervals(inout ParcelIntervals intervals) {
+    if(intervals.size <= 1)
+        return;
+    
+    uint target_size = intervals.size;
+    intervals.size = 1;
+
+    for(uint i = 1; i <= target_size - 1; i++) {
+        insert_sorted(intervals, intervals.items[i]);
+    }
+}
+
+bool intervals_overlap(ParcelInterval i1, ParcelInterval i2) {
+    return i2.entry < i1.exit;
+}
+
+// Scans the sorted set of intervals from start_index to the right and counts
+// the first contiguous sequence of intervals that each overlap their
+// successor. Returns zero when start_index lies outside the set.
+uint count_overlapping_intervals(ParcelIntervals intervals, uint start_index) {
+    if (start_index >= intervals.size)
+        return 0u;
+
+    uint count = 1u;
+    uint current_index = start_index;
+    while(current_index + 1u < intervals.size &&
+          intervals_overlap(intervals.items[current_index], intervals.items[current_index + 1u])
+        ) {
+        count++;
+        current_index++;
+    }
+
+    return count;
+}

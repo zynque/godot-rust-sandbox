@@ -1,0 +1,9 @@
+// Placeholders for the surface search that consumes the bucket estimates.
+void search_interval_cluster(ParcelIntervalCluster cluster) {
+    // scan the sorted inflection points and the midpoints between them to find the first
+    // region where the density threshold is exceeded
+}
+
+float estimate_surface(ParcelIntervals intervals, uint overlapping) {
+    return 0.0;
+}

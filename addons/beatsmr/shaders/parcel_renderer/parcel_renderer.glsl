@@ -12,13 +12,13 @@ vec3 iResolution = vec3(1.0);
 float iTime = 0.0;
 
 // Modular parcel renderer assembled by GLSL includes.
-#include "res://addons/beatsmr/shaders/parcel_renderer/constants.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/structs.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/parcel_math.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/intervals.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/tracing.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/scene.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/main_image.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/constants.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/structs.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/render/intervals.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/render/tracing.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/render/scene.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/render/main_image.glslinc"
 
 void main() {
 	ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);

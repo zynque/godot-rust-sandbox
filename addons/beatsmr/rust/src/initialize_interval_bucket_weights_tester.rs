@@ -17,7 +17,7 @@ use crate::parcel_test_common::{
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/initialize_interval_bucket_weights_test.glsl";
+    "res://addons/beatsmr/shaders/parcel_renderer/tests/initialize_interval_bucket_weights_test.glsl";
 const CONTEXT: &str = "InitializeIntervalBucketWeightsTester";
 
 /// Mirrors MAX_PARCELS in constants.glslinc.

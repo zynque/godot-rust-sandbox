@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://c3hdtcyj2b4wg"
+path="res://.godot/imported/update_interval_bucket_weights_test.glsl-d48ecaae0a14cc0c9f8e4667205d8a41.res"
+
+[deps]
+
+source_file="res://addons/beatsmr/shaders/parcel_renderer/tests/update_interval_bucket_weights_test.glsl"
+dest_files=["res://.godot/imported/update_interval_bucket_weights_test.glsl-d48ecaae0a14cc0c9f8e4667205d8a41.res"]
+
+[params]
+

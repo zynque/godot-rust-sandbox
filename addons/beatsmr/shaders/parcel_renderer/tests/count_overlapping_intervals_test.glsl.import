@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://nbw0mdsx3dqe"
+path="res://.godot/imported/count_overlapping_intervals_test.glsl-4a52031e1101005d093a714233efd06c.res"
+
+[deps]
+
+source_file="res://addons/beatsmr/shaders/parcel_renderer/tests/count_overlapping_intervals_test.glsl"
+dest_files=["res://.godot/imported/count_overlapping_intervals_test.glsl-4a52031e1101005d093a714233efd06c.res"]
+
+[params]
+

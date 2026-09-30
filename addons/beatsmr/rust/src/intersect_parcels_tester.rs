@@ -14,7 +14,7 @@ use crate::parcel_test_common::{
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/intersect_parcels_test.glsl";
+    "res://addons/beatsmr/shaders/parcel_renderer/tests/intersect_parcels_test.glsl";
 const CONTEXT: &str = "IntersectParcelsTester";
 
 /// Mirrors MAX_PARCELS in constants.glslinc.

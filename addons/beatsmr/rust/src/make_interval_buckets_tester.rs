@@ -16,7 +16,7 @@ use crate::parcel_test_common::{
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/make_interval_buckets_test.glsl";
+    "res://addons/beatsmr/shaders/parcel_renderer/tests/make_interval_buckets_test.glsl";
 const CONTEXT: &str = "MakeIntervalBucketsTester";
 
 struct TestCase {

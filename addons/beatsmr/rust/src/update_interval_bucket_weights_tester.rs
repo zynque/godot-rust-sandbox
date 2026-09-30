@@ -17,14 +17,14 @@ use crate::parcel_test_common::{
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
-    "res://addons/beatsmr/shaders/parcel_renderer/update_interval_bucket_weights_test.glsl";
+    "res://addons/beatsmr/shaders/parcel_renderer/tests/update_interval_bucket_weights_test.glsl";
 const CONTEXT: &str = "UpdateIntervalBucketWeightsTester";
 
 /// Mirrors MAX_PARCELS in constants.glslinc.
 const MAX_PARCELS: usize = 100;
 
 /// This tester draws the bucket sample positions with hash_to_unit_float() from
-/// parcel_clusterer.glslinc, so the seeds are mixed the same way here.
+/// cluster/interval_buckets.glslinc, so the seeds are mixed the same way here.
 const HASH_MULTIPLIER: u32 = 0x9e3779b9;
 
 /// The subset of `Parcel` the density evaluation reads. All test parcels are
@@ -114,7 +114,7 @@ const TEST_CASES: &[TestCase] = &[
     },
 ];
 
-/// Mirrors hash_to_unit_float() in parcel_clusterer.glslinc. GLSL uint
+/// Mirrors hash_to_unit_float() in cluster/interval_buckets.glslinc. GLSL uint
 /// multiplication wraps at 32 bits, so the mix wraps here too.
 fn hash_to_unit_float(mut value: u32) -> f32 {
     value = (value ^ 61) ^ (value >> 16);
