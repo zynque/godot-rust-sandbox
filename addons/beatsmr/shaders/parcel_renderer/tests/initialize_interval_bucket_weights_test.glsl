@@ -8,7 +8,8 @@
 // The host uploads a ray, a parcel buffer and a list of overlapping intervals,
 // then checks the bucket estimates after each interval midpoint seeds the
 // bucket that contains it with its own position and the squared density
-// observed there.
+// observed there. Buckets with no midpoint take a fraction of the average
+// observed evidence as a prior so weighted sampling can still reach them.
 //
 // Input (binding 0), a flat float array:
 //   [0 .. 3)  ray.origin

@@ -7,11 +7,11 @@
 //
 // The host uploads a ray, a parcel buffer, a list of overlapping intervals and
 // a seed. The shader seeds the buckets from the interval midpoints
-// (initialize_interval_bucket_weights()), then refines a single bucket: it
-// picks one at random with probability proportional to its weight, draws a
-// random position inside it, samples the total density at the matching ray
-// point and folds that observation, weighted by its squared density, into its
-// estimate.
+// (initialize_interval_bucket_weights()), leaving buckets with no midpoint
+// holding a prior evidence, then refines a single bucket: it picks one at
+// random with probability proportional to its weight, draws a random position
+// inside it, samples the total density at the matching ray point and folds that
+// observation, weighted by its squared density, into its estimate.
 //
 // Input (binding 0), a flat float array:
 //   [0 .. 3)  ray.origin

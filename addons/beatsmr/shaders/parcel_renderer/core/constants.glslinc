@@ -24,3 +24,8 @@
 // proportional to evidence * (deviation + this floor). The floor keeps a
 // bucket that has evidence but no measured spread yet in the running.
 #define INTERVAL_BUCKET_WEIGHT_EPSILON 1e-4
+
+// A bucket that observed no interval midpoint during initialization is given
+// this fraction of the average evidence the observed buckets carry, so weighted
+// sampling can still reach it while the observed buckets keep priority.
+#define INTERVAL_BUCKET_UNOBSERVED_EVIDENCE_FRACTION 0.5

@@ -13,7 +13,8 @@ use crate::parcel_test_common::{
 // uploads a ray, a parcel buffer and a set of overlapping intervals, dispatches
 // a single work-group, and verifies that each interval midpoint becomes the
 // estimated position of its bucket, carrying the squared density observed
-// there as its evidence.
+// there as its evidence, and that buckets with no midpoint take a fraction of
+// the average observed evidence as a prior.
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
@@ -22,6 +23,9 @@ const CONTEXT: &str = "InitializeIntervalBucketWeightsTester";
 
 /// Mirrors MAX_PARCELS in constants.glslinc.
 const MAX_PARCELS: usize = 100;
+
+/// Mirrors INTERVAL_BUCKET_UNOBSERVED_EVIDENCE_FRACTION in constants.glslinc.
+const UNOBSERVED_EVIDENCE_FRACTION: f32 = 0.5;
 
 /// The subset of `Parcel` the density evaluation reads. All test parcels are
 /// axis aligned, so `inverse_variance` is the diagonal of the inverse
@@ -104,6 +108,13 @@ const TEST_CASES: &[TestCase] = &[
         intervals: &[(7.0, 13.0, 0), (3.0, 9.0, 1)],
     },
     TestCase {
+        label: "duplicate midpoints count one observed bucket",
+        ray_origin: [0.0, 0.0, 0.0],
+        ray_direction: [0.0, 0.0, 1.0],
+        parcels: &[BRIGHT_PARCEL_AT_Z_5, DIM_PARCEL_AT_Z_10],
+        intervals: &[(0.0, 1.0, 0), (0.0, 1.0, 1), (10.0, 14.0, 1)],
+    },
+    TestCase {
         label: "two midpoints in the same bucket keep the last",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
@@ -172,6 +183,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let mut buckets = vec![0.0f32; INTERVAL_BUCKET_POINTS];
     let mut positions = vec![0.0f32; INTERVAL_BUCKET_COUNT];
     let mut evidence = vec![0.0f32; INTERVAL_BUCKET_COUNT];
+    let mut observed = vec![false; INTERVAL_BUCKET_COUNT];
 
     if let Some((first_entry, first_exit, _)) = case.intervals.first() {
         let mut front = *first_entry;
@@ -204,6 +216,24 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
 
             positions[bucket] = t;
             evidence[bucket] = density * density;
+            observed[bucket] = true;
+        }
+
+        let observed_count = observed.iter().filter(|seen| **seen).count();
+        if observed_count > 0 {
+            let observed_evidence: f32 = (0..INTERVAL_BUCKET_COUNT)
+                .filter(|i| observed[*i])
+                .map(|i| evidence[i])
+                .sum();
+            let prior =
+                UNOBSERVED_EVIDENCE_FRACTION * observed_evidence / observed_count as f32;
+            for i in 0..INTERVAL_BUCKET_COUNT {
+                if observed[i] {
+                    continue;
+                }
+                positions[i] = 0.5 * (buckets[i] + buckets[i + 1]);
+                evidence[i] = prior;
+            }
         }
     }
 

@@ -27,6 +27,9 @@ const MAX_PARCELS: usize = 100;
 /// Mirrors INTERVAL_BUCKET_WEIGHT_EPSILON in constants.glslinc.
 const WEIGHT_EPSILON: f32 = 1e-4;
 
+/// Mirrors INTERVAL_BUCKET_UNOBSERVED_EVIDENCE_FRACTION in constants.glslinc.
+const UNOBSERVED_EVIDENCE_FRACTION: f32 = 0.5;
+
 /// This tester draws the bucket sample positions with hash_to_unit_float() from
 /// cluster/interval_buckets.glslinc, so the seeds are mixed the same way here.
 const HASH_MULTIPLIER: u32 = 0x9e3779b9;
@@ -77,7 +80,7 @@ const TEST_CASES: &[TestCase] = &[
         seed: 0,
     },
     TestCase {
-        label: "seeds one bucket then refines it",
+        label: "one observed bucket with the rest holding a prior",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[UNIT_PARCEL_AT_Z_10],
@@ -93,7 +96,7 @@ const TEST_CASES: &[TestCase] = &[
         seed: 1,
     },
     TestCase {
-        label: "two midpoints seed two buckets, one is refined",
+        label: "two observed buckets, one is refined",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[UNIT_PARCEL_AT_Z_10, UNIT_PARCEL_AT_Z_6],
@@ -187,8 +190,9 @@ fn pick_bucket(evidence: &[f32], deviations: &[f32], seed: u32) -> usize {
 
 /// The buckets `update_random_interval_bucket_weight()` should produce for a
 /// case: the buckets make_interval_buckets() derives from the intervals, then
-/// initialize_interval_bucket_weights() seeds from the midpoints, then a single
-/// randomly picked bucket is refined with one density observation.
+/// initialize_interval_bucket_weights() seeds from the midpoints and gives the
+/// unobserved buckets a prior, then a single randomly picked bucket is refined
+/// with one density observation.
 fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let parcel_indices: Vec<u32> = case
         .intervals
@@ -200,6 +204,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let mut positions = vec![0.0f32; INTERVAL_BUCKET_COUNT];
     let mut evidence = vec![0.0f32; INTERVAL_BUCKET_COUNT];
     let mut deviations = vec![0.0f32; INTERVAL_BUCKET_COUNT];
+    let mut observed = vec![false; INTERVAL_BUCKET_COUNT];
 
     if let Some((first_entry, first_exit, _)) = case.intervals.first() {
         let mut front = *first_entry;
@@ -218,7 +223,8 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
         }
 
         // initialize_interval_bucket_weights(): seed each bucket from the
-        // midpoints of the intervals it contains.
+        // midpoints of the intervals it contains, then give the unobserved
+        // buckets a fraction of the average observed evidence as a prior.
         for (entry, exit, _) in case.intervals {
             let t = 0.5 * (entry + exit);
             let Some(bucket) = find_bucket(&buckets, t) else {
@@ -231,6 +237,24 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
             positions[bucket] = t;
             evidence[bucket] = density * density;
             deviations[bucket] = 0.0;
+            observed[bucket] = true;
+        }
+
+        let observed_count = observed.iter().filter(|seen| **seen).count();
+        if observed_count > 0 {
+            let observed_evidence: f32 = (0..INTERVAL_BUCKET_COUNT)
+                .filter(|i| observed[*i])
+                .map(|i| evidence[i])
+                .sum();
+            let prior =
+                UNOBSERVED_EVIDENCE_FRACTION * observed_evidence / observed_count as f32;
+            for i in 0..INTERVAL_BUCKET_COUNT {
+                if observed[i] {
+                    continue;
+                }
+                positions[i] = 0.5 * (buckets[i] + buckets[i + 1]);
+                evidence[i] = prior;
+            }
         }
 
         // update_random_interval_bucket_weight(): refine one picked bucket.
