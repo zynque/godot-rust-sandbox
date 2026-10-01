@@ -145,3 +145,59 @@ void update_interval_bucket_weights(
         observe_bucket_density(buckets, i, t, density);
     }
 }
+
+// Weight that decides how often the stochastic single bucket refinement picks
+// a bucket: more evidence and more unresolved spread make a bucket more
+// interesting, and the epsilon keeps a freshly seeded bucket, which has
+// evidence but no spread yet, eligible.
+float interval_bucket_weight(float evidence, float deviation) {
+    return evidence * (deviation + INTERVAL_BUCKET_WEIGHT_EPSILON);
+}
+
+// Picks a bucket at random with probability proportional to its weight. When
+// every weight is zero the pick is uniform instead, so a bucket is still
+// refined. Callers must ensure there is at least one bucket of parcels to
+// sample.
+uint pick_interval_bucket(ParcelIntervalBucketWeights16 buckets, uint seed) {
+    float total = 0.0;
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++)
+        total += interval_bucket_weight(buckets.evidence[i], buckets.deviations[i]);
+
+    float choice = hash_to_unit_float(seed);
+    if (total <= 0.0)
+        return uint(min(
+            choice * float(INTERVAL_BUCKET_COUNT),
+            float(INTERVAL_BUCKET_COUNT - 1)
+        ));
+
+    float target = choice * total;
+    float cumulative = 0.0;
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        cumulative += interval_bucket_weight(buckets.evidence[i], buckets.deviations[i]);
+        if (target < cumulative)
+            return i;
+    }
+    return uint(INTERVAL_BUCKET_COUNT - 1);
+}
+
+// Refines one bucket chosen at random with probability proportional to its
+// weight (see interval_bucket_weight), applying the same single density
+// observation update_interval_bucket_weights() gives to every bucket: draw a
+// random position inside the bucket, sample the total parcel density at the
+// matching ray point and fold the observation into the estimate. An empty
+// parcel set leaves the estimates untouched.
+void update_random_interval_bucket_weight(
+    inout ParcelIntervalBucketWeights16 buckets,
+    Ray ray,
+    uint seed
+) {
+    if (buckets.parcels.size == 0u)
+        return;
+
+    uint index = pick_interval_bucket(buckets, seed);
+    float pick = hash_to_unit_float(seed * 0x9e3779b9u + index);
+    float t = mix(buckets.buckets[index], buckets.buckets[index + 1u], pick);
+    vec3 p = ray.origin + t * ray.direction;
+    float density = total_parcel_density(p, buckets.parcels);
+    observe_bucket_density(buckets, index, t, density);
+}

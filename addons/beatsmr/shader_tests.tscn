@@ -20,3 +20,5 @@ script = ExtResource("1_runner")
 [node name="InitializeIntervalBucketWeightsTester" type="InitializeIntervalBucketWeightsTester" parent="."]
 
 [node name="UpdateIntervalBucketWeightsTester" type="UpdateIntervalBucketWeightsTester" parent="."]
+
+[node name="UpdateRandomIntervalBucketWeightTester" type="UpdateRandomIntervalBucketWeightTester" parent="."]

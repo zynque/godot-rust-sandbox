@@ -19,3 +19,8 @@
 // using one more boundary position than there are buckets.
 #define INTERVAL_BUCKET_COUNT 16
 #define INTERVAL_BUCKET_POINTS 17
+
+// update_random_interval_bucket_weight() picks a bucket with probability
+// proportional to evidence * (deviation + this floor). The floor keeps a
+// bucket that has evidence but no measured spread yet in the running.
+#define INTERVAL_BUCKET_WEIGHT_EPSILON 1e-4

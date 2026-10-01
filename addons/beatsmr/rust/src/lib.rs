@@ -11,6 +11,7 @@ mod initialize_interval_bucket_weights_tester;
 mod sort_interval_cluster_tester;
 mod sort_intervals_tester;
 mod update_interval_bucket_weights_tester;
+mod update_random_interval_bucket_weight_tester;
 
 struct BeatsmrExtension;
 
