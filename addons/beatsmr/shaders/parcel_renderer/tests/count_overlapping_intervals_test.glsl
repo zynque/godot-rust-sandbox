@@ -28,7 +28,9 @@ vec3 iResolution = vec3(1.0);
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/parcel_intervals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_cluster.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_buckets.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_construction.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_observation.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_sampling.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/tests/test_harness.glslinc"
 
 void main() {

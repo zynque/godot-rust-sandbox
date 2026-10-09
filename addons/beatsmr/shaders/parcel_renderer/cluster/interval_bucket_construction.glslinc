@@ -1,0 +1,65 @@
+// ---------------------------------------------------------------------------
+// Bucket construction
+// ---------------------------------------------------------------------------
+
+// Total density contributed by every parcel in the set at world point p.
+float total_parcel_density(vec3 p, ParcelSet parcels) {
+    float density = 0.0;
+    for (uint i = 0u; i < parcels.size; i++)
+        density += parcelDensity(p, parcel_buffer[parcels.indices[i]]);
+    return density;
+}
+
+void zero_interval_bucket_weights(inout ParcelIntervalBucketWeights16 buckets) {
+    for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
+        buckets.buckets[i] = 0.0;
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        buckets.positions[i] = 0.0;
+        buckets.evidence[i] = 0.0;
+        buckets.samples[i] = 0u;
+        buckets.deviations[i] = 0.0;
+    }
+}
+
+void initialize_interval_bucket_boundaries(
+    inout ParcelIntervalBucketWeights16 buckets,
+    float front,
+    float back
+) {
+    float span = back - front;
+    for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
+        buckets.buckets[i] = front + span * float(i) / float(INTERVAL_BUCKET_COUNT);
+
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        buckets.positions[i] = 0.5 * (buckets.buckets[i] + buckets.buckets[i + 1u]);
+        buckets.evidence[i] = 0.0;
+        buckets.samples[i] = 0u;
+        buckets.deviations[i] = 0.0;
+    }
+}
+
+// Stratifies a cluster's intervals into INTERVAL_BUCKET_COUNT buckets spanning
+// the cluster's entry/exit extent and gives every bucket an empty estimate
+// centred on itself: no evidence, no samples and no deviation yet. An empty
+// interval list yields zeroed buckets and estimates.
+ParcelIntervalBucketWeights16 make_interval_buckets(ParcelIntervals intervals) {
+    ParcelIntervalBucketWeights16 result;
+    result.parcels.size = intervals.size;
+
+    if (intervals.size == 0u) {
+        zero_interval_bucket_weights(result);
+        return result;
+    }
+
+    float front = intervals.items[0u].entry;
+    float back = intervals.items[0u].exit;
+    for (uint i = 0u; i < intervals.size; i++) {
+        ParcelInterval interval = intervals.items[i];
+        result.parcels.indices[i] = uint(interval.parcel_index);
+        front = min(front, interval.entry);
+        back = max(back, interval.exit);
+    }
+
+    initialize_interval_bucket_boundaries(result, front, back);
+    return result;
+}

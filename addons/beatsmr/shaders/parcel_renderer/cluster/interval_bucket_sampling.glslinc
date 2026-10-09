@@ -1,95 +1,6 @@
-// Total density contributed by every parcel in the set at world point p.
-float total_parcel_density(vec3 p, ParcelSet parcels) {
-    float density = 0.0;
-    for (uint i = 0u; i < parcels.size; i++)
-        density += parcelDensity(p, parcel_buffer[parcels.indices[i]]);
-    return density;
-}
-
-// Stratifies a cluster's intervals into INTERVAL_BUCKET_COUNT buckets spanning
-// the cluster's entry/exit extent and gives every bucket an empty estimate
-// centred on itself: no evidence, no samples and no deviation yet. An empty
-// interval list yields zeroed buckets and estimates.
-ParcelIntervalBucketWeights16 make_interval_buckets(ParcelIntervals intervals) {
-    ParcelIntervalBucketWeights16 result;
-    result.parcels.size = intervals.size;
-
-    if (intervals.size == 0u) {
-        for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
-            result.buckets[i] = 0.0;
-        for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-            result.positions[i] = 0.0;
-            result.evidence[i] = 0.0;
-            result.samples[i] = 0u;
-            result.deviations[i] = 0.0;
-        }
-        return result;
-    }
-
-    float front = intervals.items[0u].entry;
-    float back = intervals.items[0u].exit;
-    for (uint i = 0u; i < intervals.size; i++) {
-        ParcelInterval interval = intervals.items[i];
-        result.parcels.indices[i] = uint(interval.parcel_index);
-        front = min(front, interval.entry);
-        back = max(back, interval.exit);
-    }
-
-    float span = back - front;
-    for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
-        result.buckets[i] =
-            front + span * float(i) / float(INTERVAL_BUCKET_COUNT);
-
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        result.positions[i] = 0.5 * (result.buckets[i] + result.buckets[i + 1u]);
-        result.evidence[i] = 0.0;
-        result.samples[i] = 0u;
-        result.deviations[i] = 0.0;
-    }
-
-    return result;
-}
-
-// Folds one density observation into a bucket's estimate. The observation at
-// position x carries a weight of its squared density, and evidence[] becomes
-// the running average of those weights: a new observation nudges the average by
-// its difference from the current value over the new sample count. The
-// estimated position then moves towards x in proportion to the share of the
-// total weight that observation holds, and the deviation grows by the weighted
-// squared distance to the new position. Every observation counts as a sample,
-// including one of zero density, which dilutes the average but moves nothing.
-void observe_bucket_density(
-    inout ParcelIntervalBucketWeights16 buckets,
-    uint index,
-    float x,
-    float density
-) {
-    float w = density * density;
-    uint samples = buckets.samples[index] + 1u;
-    float evidence = buckets.evidence[index]
-        + (w - buckets.evidence[index]) / float(samples);
-    buckets.evidence[index] = evidence;
-    buckets.samples[index] = samples;
-
-    if (w <= 0.0)
-        return;
-
-    float total = evidence * float(samples);
-    float delta = x - buckets.positions[index];
-    float position = buckets.positions[index] + (w / total) * delta;
-
-    buckets.positions[index] = position;
-    buckets.deviations[index] += w * delta * (x - position);
-}
-
-// Mean of a bucket's accumulated deviation: the sum spread over the samples
-// that produced it, the counterpart of evidence being the mean sample weight.
-// A bucket with no samples has no mean to report and returns zero.
-float mean_deviation(float deviation, uint samples) {
-    if (samples == 0u)
-        return 0.0;
-    return deviation / float(samples);
-}
+// ---------------------------------------------------------------------------
+// Bucket seeding and sampling
+// ---------------------------------------------------------------------------
 
 // Index of the bucket containing t, or -1 when t lies outside the buckets.
 // Buckets are half open, except the last which includes its far boundary.
@@ -103,6 +14,31 @@ int find_interval_bucket(float boundaries[INTERVAL_BUCKET_POINTS], float t) {
             return int(i);
     }
     return -1;
+}
+
+void apply_interval_bucket_prior(
+    inout ParcelIntervalBucketWeights16 buckets,
+    bool observed[INTERVAL_BUCKET_COUNT]
+) {
+    uint observed_count = 0u;
+    float observed_evidence = 0.0;
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        if (!observed[i])
+            continue;
+        observed_count++;
+        observed_evidence += buckets.evidence[i];
+    }
+    if (observed_count == 0u)
+        return;
+
+    float prior = INTERVAL_BUCKET_UNOBSERVED_EVIDENCE_FRACTION
+        * observed_evidence / float(observed_count);
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        if (observed[i])
+            continue;
+        buckets.positions[i] = 0.5 * (buckets.buckets[i] + buckets.buckets[i + 1u]);
+        buckets.evidence[i] = prior;
+    }
 }
 
 // Seeds each bucket from the interval midpoints, a first step to identify
@@ -140,25 +76,7 @@ void initialize_interval_bucket_weights(
         observed[index] = true;
     }
 
-    uint observed_count = 0u;
-    float observed_evidence = 0.0;
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        if (!observed[i])
-            continue;
-        observed_count++;
-        observed_evidence += buckets.evidence[i];
-    }
-    if (observed_count == 0u)
-        return;
-
-    float prior = INTERVAL_BUCKET_UNOBSERVED_EVIDENCE_FRACTION
-        * observed_evidence / float(observed_count);
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        if (observed[i])
-            continue;
-        buckets.positions[i] = 0.5 * (buckets.buckets[i] + buckets.buckets[i + 1u]);
-        buckets.evidence[i] = prior;
-    }
+    apply_interval_bucket_prior(buckets, observed);
 }
 
 // Repeatable value in [0, 1) hashed from `value`. Integer multiplication wraps
