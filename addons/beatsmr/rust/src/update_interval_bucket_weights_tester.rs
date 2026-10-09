@@ -142,8 +142,9 @@ fn total_density(p: [f32; 3], parcels: &[TestParcel], indices: &[u32]) -> f32 {
 }
 
 /// The buckets `update_interval_bucket_weights()` should produce for a case:
-/// the empty buckets of make_interval_buckets(), then one density observation
-/// per bucket folded into its estimate.
+/// the empty buckets of make_interval_buckets(), then one density sample per
+/// bucket folded into its estimate, with evidence as the running average of the
+/// squared densities and samples counting every observation.
 fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let parcel_indices: Vec<u32> = case
         .intervals
@@ -154,6 +155,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let mut buckets = vec![0.0f32; INTERVAL_BUCKET_POINTS];
     let mut positions = vec![0.0f32; INTERVAL_BUCKET_COUNT];
     let mut evidence = vec![0.0f32; INTERVAL_BUCKET_COUNT];
+    let mut samples = vec![0u32; INTERVAL_BUCKET_COUNT];
     let mut deviations = vec![0.0f32; INTERVAL_BUCKET_COUNT];
 
     if let Some((first_entry, first_exit, _)) = case.intervals.first() {
@@ -184,15 +186,19 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
             let density = total_density(p, case.parcels, &parcel_indices);
 
             let w = density * density;
+            let sample_count = samples[i] + 1;
+            let average = evidence[i] + (w - evidence[i]) / sample_count as f32;
+            evidence[i] = average;
+            samples[i] = sample_count;
+
             if w <= 0.0 {
                 continue;
             }
 
-            let total = evidence[i] + w;
+            let total = average * sample_count as f32;
             let delta = t - positions[i];
             let position = positions[i] + (w / total) * delta;
             positions[i] = position;
-            evidence[i] = total;
             deviations[i] += w * delta * (t - position);
         }
     }
@@ -202,6 +208,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
         buckets,
         positions,
         evidence,
+        samples,
         deviations,
         parcel_indices,
     }

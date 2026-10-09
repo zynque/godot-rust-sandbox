@@ -80,6 +80,7 @@ fn expected_buckets(intervals: &[Interval]) -> BucketWeights {
         buckets,
         positions,
         evidence: vec![0.0; INTERVAL_BUCKET_COUNT],
+        samples: vec![0; INTERVAL_BUCKET_COUNT],
         deviations: vec![0.0; INTERVAL_BUCKET_COUNT],
         parcel_indices,
     }

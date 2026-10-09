@@ -260,8 +260,10 @@ pub struct BucketWeights {
     pub buckets: Vec<f32>,
     /// buckets.positions[0 .. INTERVAL_BUCKET_COUNT): estimated positions.
     pub positions: Vec<f32>,
-    /// buckets.evidence[0 .. INTERVAL_BUCKET_COUNT): total evidence.
+    /// buckets.evidence[0 .. INTERVAL_BUCKET_COUNT): average squared density.
     pub evidence: Vec<f32>,
+    /// buckets.samples[0 .. INTERVAL_BUCKET_COUNT): number of samples tested.
+    pub samples: Vec<u32>,
     /// buckets.deviations[0 .. INTERVAL_BUCKET_COUNT): weighted squared
     /// deviations around the estimated positions.
     pub deviations: Vec<f32>,
@@ -270,12 +272,12 @@ pub struct BucketWeights {
 }
 
 /// Floats a bucket weights shader writes to binding 1: the parcel count, then
-/// the bucket boundaries, then the positions, the evidence and the deviations,
-/// then the parcel indices. The parcel set is sized MAX_PARCELS in
+/// the bucket boundaries, then the positions, the evidence, the samples and the
+/// deviations, then the parcel indices. The parcel set is sized MAX_PARCELS in
 /// structs.glslinc.
 pub fn bucket_weights_output_floats() -> usize {
     1 + INTERVAL_BUCKET_POINTS
-        + 3 * INTERVAL_BUCKET_COUNT
+        + 4 * INTERVAL_BUCKET_COUNT
         + MAX_PARCEL_INTERVALS
 }
 
@@ -291,14 +293,19 @@ pub fn decode_bucket_weights(values: &[f32]) -> Result<BucketWeights, String> {
     let buckets_start = 1;
     let positions_start = buckets_start + INTERVAL_BUCKET_POINTS;
     let evidence_start = positions_start + INTERVAL_BUCKET_COUNT;
-    let deviations_start = evidence_start + INTERVAL_BUCKET_COUNT;
+    let samples_start = evidence_start + INTERVAL_BUCKET_COUNT;
+    let deviations_start = samples_start + INTERVAL_BUCKET_COUNT;
     let indices_start = deviations_start + INTERVAL_BUCKET_COUNT;
 
     Ok(BucketWeights {
         parcel_count: parcel_count as u32,
         buckets: values[buckets_start..positions_start].to_vec(),
         positions: values[positions_start..evidence_start].to_vec(),
-        evidence: values[evidence_start..deviations_start].to_vec(),
+        evidence: values[evidence_start..samples_start].to_vec(),
+        samples: values[samples_start..deviations_start]
+            .iter()
+            .map(|value| *value as u32)
+            .collect(),
         deviations: values[deviations_start..indices_start].to_vec(),
         parcel_indices: values[indices_start..indices_start + parcel_count]
             .iter()
@@ -313,6 +320,7 @@ pub fn verify_bucket_weights(
 ) -> Result<(), String> {
     let matches = actual.parcel_count == expected.parcel_count
         && actual.parcel_indices == expected.parcel_indices
+        && actual.samples == expected.samples
         && floats_match(&actual.buckets, &expected.buckets)
         && floats_match(&actual.positions, &expected.positions)
         && floats_match(&actual.evidence, &expected.evidence)

@@ -183,6 +183,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
     let mut buckets = vec![0.0f32; INTERVAL_BUCKET_POINTS];
     let mut positions = vec![0.0f32; INTERVAL_BUCKET_COUNT];
     let mut evidence = vec![0.0f32; INTERVAL_BUCKET_COUNT];
+    let mut samples = vec![0u32; INTERVAL_BUCKET_COUNT];
     let mut observed = vec![false; INTERVAL_BUCKET_COUNT];
 
     if let Some((first_entry, first_exit, _)) = case.intervals.first() {
@@ -216,6 +217,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
 
             positions[bucket] = t;
             evidence[bucket] = density * density;
+            samples[bucket] = 1;
             observed[bucket] = true;
         }
 
@@ -242,6 +244,7 @@ fn expected_bucket_weights(case: &TestCase) -> BucketWeights {
         buckets,
         positions,
         evidence,
+        samples,
         deviations: vec![0.0; INTERVAL_BUCKET_COUNT],
         parcel_indices,
     }
