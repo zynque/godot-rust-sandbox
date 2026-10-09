@@ -81,6 +81,10 @@ impl ParcelRendererNode {
         }
 
         let shader_file: Gd<RdShaderFile> = load(SHADER_PATH);
+        if !shader_file.is_instance_valid() {
+            godot_warn!("ParcelRendererNode: failed to load shader file {}", SHADER_PATH);
+            return;
+        }
         let Some(spirv) = shader_file.get_spirv() else {
             godot_warn!("ParcelRendererNode: failed to load SPIR-V from {}", SHADER_PATH);
             return;

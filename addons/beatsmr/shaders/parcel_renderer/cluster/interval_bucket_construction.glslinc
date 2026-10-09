@@ -10,6 +10,18 @@ float total_parcel_density(vec3 p, ParcelSet parcels) {
     return density;
 }
 
+// Gradient of total_parcel_density() with respect to p, summed over the set.
+vec3 total_parcel_density_gradient(vec3 p, ParcelSet parcels) {
+    vec3 gradient = vec3(0.0);
+    for (uint i = 0u; i < parcels.size; i++) {
+        Parcel parcel = parcel_buffer[parcels.indices[i]];
+        vec3 d = p - parcel.mean;
+        float density = parcelDensity(p, parcel);
+        gradient += -density * (parcel.inverseCovariance * d);
+    }
+    return gradient;
+}
+
 void zero_interval_bucket_weights(inout ParcelIntervalBucketWeights16 buckets) {
     for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++)
         buckets.buckets[i] = 0.0;

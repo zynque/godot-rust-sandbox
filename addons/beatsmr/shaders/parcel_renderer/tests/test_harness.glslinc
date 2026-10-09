@@ -85,3 +85,10 @@ void write_bucket_weights(ParcelIntervalBucketWeights16 buckets) {
         cursor++;
     }
 }
+
+// Writes a surface sample as [position, density, isSurface].
+void write_surface_sample(SurfaceSample result) {
+    output_data[0] = result.position;
+    output_data[1] = result.density;
+    output_data[2] = result.isSurface ? 1.0 : 0.0;
+}

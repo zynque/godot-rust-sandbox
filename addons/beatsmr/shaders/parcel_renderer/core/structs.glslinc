@@ -23,6 +23,18 @@ struct ParcelIntersection {
     vec3 normal;
 };
 
+// Outcome of searching a ray's interval buckets for matter: where along the
+// ray the search settled and the density there.
+struct SurfaceSample {
+    // Distance along the ray.
+    float position;
+    // Total parcel density at that distance.
+    float density;
+    // True when a threshold crossing was found and refined to the surface;
+    // false when no crossing was observed and the densest bucket was returned.
+    bool isSurface;
+};
+
 // TODO: array of indices instead of Parcels
 struct ParcelBundle {
     Parcel[MAX_CANDIDATES] parcels;

@@ -12,12 +12,22 @@ vec3 iResolution = vec3(1.0);
 float iTime = 0.0;
 
 // Modular parcel renderer assembled by GLSL includes.
+// Include order matters: each file may use definitions from the files above it.
+// A pixel's ray is intersected against the parcel set, the intervals are
+// stratified into buckets that are refined with stochastic density samples, and
+// the buckets are searched for the first surface crossing
+// (see cluster/surface_search.glslinc).
+// NOTE: Godot only reimports this shader when this file changes, not when an
+// included .glslinc changes, so reimport it after editing any include.
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/constants.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/structs.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/core/globals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/parcel_intervals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_construction.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_observation.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_sampling.glslinc"
+#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/surface_search.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/intervals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/tracing.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/scene.glslinc"

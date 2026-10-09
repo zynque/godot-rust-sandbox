@@ -29,3 +29,17 @@
 // this fraction of the average evidence the observed buckets carry, so weighted
 // sampling can still reach it while the observed buckets keep priority.
 #define INTERVAL_BUCKET_UNOBSERVED_EVIDENCE_FRACTION 0.5
+
+// search_interval_bucket_surface() refines the first threshold crossing with a
+// safeguarded Newton iteration. It stops after this many passes, when the
+// density residual drops below SURFACE_RESIDUAL_EPSILON, or whenever the
+// ray-aligned slope is too shallow to divide by (below SURFACE_SLOPE_EPSILON)
+// or the Newton step would leave the bracket, in which case it bisects instead.
+#define SURFACE_NEWTON_ITERATIONS 12
+#define SURFACE_RESIDUAL_EPSILON 1e-5
+#define SURFACE_SLOPE_EPSILON 1e-6
+
+// traceParcels() folds this many stochastic density observations into the
+// bucket estimates before searching them for the surface, so every bucket has
+// evidence to compare against the threshold.
+#define INTERVAL_BUCKET_SAMPLING_PASSES 64

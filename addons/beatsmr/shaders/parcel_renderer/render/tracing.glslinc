@@ -1,45 +1,32 @@
-ParcelIntersection traceParcels(Ray ray, ParcelBundle bundle) {
+// Traces a ray against the parcels in `set` for the first density threshold
+// crossing that marks a solid surface. The ray's parcel intervals are
+// stratified into buckets, the buckets are refined with stochastic density
+// observations, and the estimates are searched for the crossing, which is
+// refined with a guarded Newton solve (see search_interval_bucket_surface).
+// When no crossing is observed the densest bucket stands in.
+ParcelIntersection traceParcels(Ray ray, ParcelSet set) {
     ParcelIntersection intersection;
     intersection.isSurface = false;
     intersection.density = 0.0;
+    intersection.point = ray.origin;
+    intersection.normal = -ray.direction;
 
-    vec2 range = calculateParcelDistanceBounds(ray, bundle);
-    if (range.x == MIN_FLOAT || range.y == MAX_FLOAT)
+    ParcelIntervals intervals = intersect_parcels(ray, set);
+    if (intervals.size == 0u)
         return intersection;
 
-    float t = range.x;
+    sort_intervals(intervals);
 
-    // Boundary stepping path retained for possible future optimization.
-    // BoundaryIntervalSet boundaries = calculateParcelBoundaryIntervals(ray, bundle);
-    // if (boundaries.size == 0)
-    //     return intersection;
-    //
-    // float t = boundaries.distances[0];
+    ParcelIntervalBucketWeights16 buckets = make_interval_buckets(intervals);
+    initialize_interval_bucket_weights(buckets, intervals, ray);
+    for (int i = 0; i < INTERVAL_BUCKET_SAMPLING_PASSES; i++)
+        update_random_interval_bucket_weight(buckets, ray, uint(i) + 1u);
 
-    float maxDensity = 0.0;
-
-    for (int i = 0; i < MAX_STEPS; i++) {
-        vec3 p = ray.origin + t * ray.direction;
-        float d = 0.0;
-        for (int j = 0; j < bundle.size; j++)
-            d += parcelDensity(p, bundle.parcels[j]);
-        maxDensity = max(maxDensity, d);
-
-        if (d > ISOSURFACE) {
-            intersection.isSurface = true;
-            intersection.density = maxDensity;
-            intersection.point = p;
-            intersection.normal = normalAtPoint(p, bundle);
-            return intersection;
-        }
-
-        t += STEP_SIZE;
-        if (t > range.y)
-            // if (t > boundaries.distances[boundaries.size - 1])
-            break;
-    }
-
-    intersection.density = maxDensity;
+    SurfaceSample result = search_interval_bucket_surface(buckets, ray);
+    intersection.isSurface = result.isSurface;
+    intersection.density = result.density;
+    intersection.point = ray.origin + result.position * ray.direction;
+    intersection.normal = normalize(-total_parcel_density_gradient(intersection.point, set));
     return intersection;
 }
 

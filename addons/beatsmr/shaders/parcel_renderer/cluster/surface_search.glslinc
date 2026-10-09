@@ -1,9 +1,81 @@
-// Placeholders for the surface search that consumes the bucket estimates.
-void search_interval_cluster(ParcelIntervalCluster cluster) {
-    // scan the sorted inflection points and the midpoints between them to find the first
-    // region where the density threshold is exceeded
+// ---------------------------------------------------------------------------
+// Surface search over the interval bucket estimates
+// ---------------------------------------------------------------------------
+
+// Safeguarded Newton solve of total_parcel_density(p(t)) == ISOSURFACE on
+// [lo, hi], where the density sits at or below the threshold at lo and above it
+// at hi. Every pass narrows the bracket by the sign of the residual, then moves
+// t either along the ray-aligned density gradient (a Newton step) or to the
+// bracket midpoint. A Newton step is rejected and the bracket halved whenever
+// the slope is too shallow to divide by or the step would leave the bracket, so
+// the iteration cannot escape the crossing region.
+float refine_surface_distance(Ray ray, ParcelSet parcels, float lo, float hi) {
+    float t = 0.5 * (lo + hi);
+    for (uint i = 0u; i < SURFACE_NEWTON_ITERATIONS; i++) {
+        vec3 p = ray.origin + t * ray.direction;
+        float residual = total_parcel_density(p, parcels) - ISOSURFACE;
+        if (abs(residual) < SURFACE_RESIDUAL_EPSILON)
+            break;
+
+        if (residual > 0.0)
+            hi = t;
+        else
+            lo = t;
+
+        float slope = dot(total_parcel_density_gradient(p, parcels), ray.direction);
+        float step = abs(slope) > SURFACE_SLOPE_EPSILON
+            ? t - residual / slope
+            : 0.5 * (lo + hi);
+        t = (step > lo && step < hi) ? step : 0.5 * (lo + hi);
+    }
+    return t;
 }
 
-float estimate_surface(ParcelIntervals intervals, uint overlapping) {
-    return 0.0;
+// Scans the bucket estimates front to back for the first bucket whose sampled
+// density, the square root of its accumulated squared density, rises past
+// ISOSURFACE. Every earlier bucket stayed at or below the threshold, so the
+// surface lies between the previous estimated position and this bucket's; a
+// refined crossing is reported there with the true density at the found point.
+// When no bucket crosses the threshold the densest bucket is reported instead,
+// at its estimated position.
+SurfaceSample search_interval_bucket_surface(ParcelIntervalBucketWeights16 buckets, Ray ray) {
+    SurfaceSample result;
+    result.position = 0.0;
+    result.density = 0.0;
+    result.isSurface = false;
+
+    if (buckets.parcels.size == 0u)
+        return result;
+
+    float previous = buckets.buckets[0];
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        if (sqrt(buckets.evidence[i]) > ISOSURFACE) {
+            float position = refine_surface_distance(
+                ray,
+                buckets.parcels,
+                previous,
+                buckets.positions[i]
+            );
+            result.position = position;
+            result.density = total_parcel_density(
+                ray.origin + position * ray.direction,
+                buckets.parcels
+            );
+            result.isSurface = true;
+            return result;
+        }
+        previous = buckets.positions[i];
+    }
+
+    uint densest = 0u;
+    for (uint i = 1u; i < INTERVAL_BUCKET_COUNT; i++)
+        if (buckets.evidence[i] > buckets.evidence[densest])
+            densest = i;
+
+    result.position = buckets.positions[densest];
+    result.density = total_parcel_density(
+        ray.origin + result.position * ray.direction,
+        buckets.parcels
+    );
+    return result;
 }

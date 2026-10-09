@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://2s5jk58ahxu2"
+path="res://.godot/imported/search_interval_bucket_surface_test.glsl-fc3167a619f985560076e7fffdcd7c76.res"
+
+[deps]
+
+source_file="res://addons/beatsmr/shaders/parcel_renderer/tests/search_interval_bucket_surface_test.glsl"
+dest_files=["res://.godot/imported/search_interval_bucket_surface_test.glsl-fc3167a619f985560076e7fffdcd7c76.res"]
+
+[params]
+

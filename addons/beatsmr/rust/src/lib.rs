@@ -8,6 +8,7 @@ mod parcel_renderer_node;
 mod parcel_test_common;
 mod shader_test_common;
 mod initialize_interval_bucket_weights_tester;
+mod search_interval_bucket_surface_tester;
 mod sort_interval_cluster_tester;
 mod sort_intervals_tester;
 mod update_interval_bucket_weights_tester;
