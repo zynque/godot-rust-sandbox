@@ -35,11 +35,25 @@
 // density residual drops below SURFACE_RESIDUAL_EPSILON, or whenever the
 // ray-aligned slope is too shallow to divide by (below SURFACE_SLOPE_EPSILON)
 // or the Newton step would leave the bracket, in which case it bisects instead.
-#define SURFACE_NEWTON_ITERATIONS 12
+#define SURFACE_NEWTON_ITERATIONS 8
 #define SURFACE_RESIDUAL_EPSILON 1e-5
 #define SURFACE_SLOPE_EPSILON 1e-6
+
+// Once the stochastic buckets have narrowed the range, the surface search walks
+// it with exact density samples at this target step, centred to keep the sample
+// count within the cap. The step matches the old marching resolution but only
+// spans the narrowed range, which is usually tiny.
+#define INTERVAL_SURFACE_SCAN_STEP 0.005
+#define INTERVAL_SURFACE_SCAN_MAX_STEPS 512
 
 // traceParcels() folds this many stochastic density observations into the
 // bucket estimates before searching them for the surface, so every bucket has
 // evidence to compare against the threshold.
-#define INTERVAL_BUCKET_SAMPLING_PASSES 64
+#define INTERVAL_BUCKET_SAMPLING_PASSES 32
+
+// Each sampling pass narrows the bucket range with
+// narrow_interval_bucket_weights(): the leading and trailing buckets whose
+// estimated density stays below this fraction of ISOSURFACE are dropped and the
+// remaining span is restratified into fresh, finer buckets. A fraction below 1
+// keeps a margin of sub-threshold buckets so the crossing stays bracketed.
+#define INTERVAL_BUCKET_NARROW_THRESHOLD_FRACTION 0.3

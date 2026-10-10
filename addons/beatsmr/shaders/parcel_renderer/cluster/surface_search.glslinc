@@ -31,13 +31,14 @@ float refine_surface_distance(Ray ray, ParcelSet parcels, float lo, float hi) {
     return t;
 }
 
-// Scans the bucket estimates front to back for the first bucket whose sampled
-// density, the square root of its accumulated squared density, rises past
-// ISOSURFACE. Every earlier bucket stayed at or below the threshold, so the
-// surface lies between the previous estimated position and this bucket's; a
-// refined crossing is reported there with the true density at the found point.
-// When no bucket crosses the threshold the densest bucket is reported instead,
-// at its estimated position.
+// Resolves the surface along the ray over the (already narrowed) bucket span
+// with exact density samples. The stochastic buckets have localized where
+// density is of interest; this walks that span at a fixed resolution with a
+// bounded sample count, takes the first step that rises through ISOSURFACE as
+// the crossing bracket, refines it with the guarded Newton solve and reports
+// the exact density there. When no step crosses the threshold it reports the
+// densest sample instead, so the result is a smooth, deterministic function of
+// the ray rather than a jumpy per-pixel estimate.
 SurfaceSample search_interval_bucket_surface(ParcelIntervalBucketWeights16 buckets, Ray ray) {
     SurfaceSample result;
     result.position = 0.0;
@@ -47,15 +48,40 @@ SurfaceSample search_interval_bucket_surface(ParcelIntervalBucketWeights16 bucke
     if (buckets.parcels.size == 0u)
         return result;
 
-    float previous = buckets.buckets[0];
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        if (sqrt(buckets.evidence[i]) > ISOSURFACE) {
-            float position = refine_surface_distance(
-                ray,
-                buckets.parcels,
-                previous,
-                buckets.positions[i]
-            );
+    float front = buckets.buckets[0];
+    float back = buckets.buckets[uint(INTERVAL_BUCKET_COUNT)];
+    float span = back - front;
+    float count = clamp(
+        ceil(span / INTERVAL_SURFACE_SCAN_STEP),
+        1.0,
+        float(INTERVAL_SURFACE_SCAN_MAX_STEPS)
+    );
+    float step = span / count;
+    int steps = int(count);
+
+    float front_density =
+        total_parcel_density(ray.origin + front * ray.direction, buckets.parcels);
+    if (front_density > ISOSURFACE) {
+        result.position = front;
+        result.density = front_density;
+        result.isSurface = true;
+        return result;
+    }
+
+    float previous = front;
+    float densest_position = front;
+    float densest_density = front_density;
+
+    for (int i = 1; i <= steps; i++) {
+        float t = front + step * float(i);
+        float density =
+            total_parcel_density(ray.origin + t * ray.direction, buckets.parcels);
+        if (density > densest_density) {
+            densest_density = density;
+            densest_position = t;
+        }
+        if (density > ISOSURFACE) {
+            float position = refine_surface_distance(ray, buckets.parcels, previous, t);
             result.position = position;
             result.density = total_parcel_density(
                 ray.origin + position * ray.direction,
@@ -64,18 +90,10 @@ SurfaceSample search_interval_bucket_surface(ParcelIntervalBucketWeights16 bucke
             result.isSurface = true;
             return result;
         }
-        previous = buckets.positions[i];
+        previous = t;
     }
 
-    uint densest = 0u;
-    for (uint i = 1u; i < INTERVAL_BUCKET_COUNT; i++)
-        if (buckets.evidence[i] > buckets.evidence[densest])
-            densest = i;
-
-    result.position = buckets.positions[densest];
-    result.density = total_parcel_density(
-        ray.origin + result.position * ray.direction,
-        buckets.parcels
-    );
+    result.position = densest_position;
+    result.density = densest_density;
     return result;
 }

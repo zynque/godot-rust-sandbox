@@ -5,11 +5,10 @@
 // Isolated harness for search_interval_bucket_surface() from
 // cluster/surface_search.glslinc.
 //
-// The host uploads a ray, a parcel buffer and a ready made set of interval
-// buckets (boundaries, estimated positions and evidence). The shader looks for
-// the first bucket whose sampled density exceeds the threshold, refines that
-// crossing to the surface with the guarded Newton solve, and otherwise reports
-// the densest bucket at its estimated position.
+// The host uploads a ray, a parcel buffer and the bucket boundaries that span
+// the range the stochastic phase narrowed to. The shader walks that span with
+// exact density samples, refines the first crossing it finds with the guarded
+// Newton solve, and otherwise reports the densest sample.
 //
 // Input (binding 0), a flat float array:
 //   [0 .. 3)  ray.origin
@@ -18,11 +17,9 @@
 //   then, per parcel: mean (3), the inverse covariance (9, column major) and
 //   the peak density
 //   then the bucket boundaries (INTERVAL_BUCKET_POINTS)
-//   then the estimated positions (INTERVAL_BUCKET_COUNT)
-//   then the evidence (INTERVAL_BUCKET_COUNT)
 //
-// The bucket parcel set is the uploaded parcel buffer in order. The samples and
-// deviations are not read by the search and stay zero.
+// The bucket parcel set is the uploaded parcel buffer in order. The estimated
+// positions and evidence are not read by the search and stay zero.
 //
 // Output (binding 1): see write_surface_sample() in test_harness.glslinc.
 // ---------------------------------------------------------------------------
@@ -81,14 +78,8 @@ void main() {
         cursor += 1u;
     }
     for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        buckets.positions[i] = input_data[cursor];
-        cursor += 1u;
-    }
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        buckets.evidence[i] = input_data[cursor];
-        cursor += 1u;
-    }
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        buckets.positions[i] = 0.0;
+        buckets.evidence[i] = 0.0;
         buckets.samples[i] = 0u;
         buckets.deviations[i] = 0.0;
     }

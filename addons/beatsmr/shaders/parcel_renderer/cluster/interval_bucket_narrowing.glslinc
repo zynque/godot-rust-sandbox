@@ -1,0 +1,97 @@
+// ---------------------------------------------------------------------------
+// Bucket range narrowing
+// ---------------------------------------------------------------------------
+
+// Folds bucket `source` of `other` into bucket `index` of `buckets`, pooling two
+// weighted estimates: sample counts add, evidence becomes the combined mean
+// sample weight, the position the weight-weighted mean of the two positions and
+// the deviation the squared deviation of both parts around the combined
+// position (parallel axis theorem). A source carrying no samples leaves the
+// target untouched.
+void merge_interval_bucket_estimate(
+    inout ParcelIntervalBucketWeights16 buckets,
+    uint index,
+    ParcelIntervalBucketWeights16 other,
+    uint source
+) {
+    uint source_samples = other.samples[source];
+    if (source_samples == 0u)
+        return;
+
+    float source_weight = other.evidence[source] * float(source_samples);
+    float target_weight = buckets.evidence[index] * float(buckets.samples[index]);
+    float combined_weight = target_weight + source_weight;
+    if (combined_weight <= 0.0)
+        return;
+
+    float source_position = other.positions[source];
+    float target_position = buckets.positions[index];
+    float combined_position =
+        (target_weight * target_position + source_weight * source_position) / combined_weight;
+
+    buckets.deviations[index] +=
+          target_weight * (target_position - combined_position)
+              * (target_position - combined_position)
+        + other.deviations[source]
+        + source_weight * (source_position - combined_position)
+              * (source_position - combined_position);
+    buckets.positions[index] = combined_position;
+    buckets.samples[index] += source_samples;
+    buckets.evidence[index] = combined_weight / float(buckets.samples[index]);
+}
+
+// Narrows the bucket range to the buckets whose estimated density, the square
+// root of the accumulated squared density, reaches `threshold`, dropping the
+// sub-threshold buckets at either end while keeping one bucket of margin so the
+// kept span still leads in below the threshold. The kept span is restratified
+// evenly into INTERVAL_BUCKET_COUNT fresh buckets and the old estimates are
+// carried over: each moves to the new bucket containing its position, estimates
+// that land together are merged, and new buckets that receive none take the
+// unobserved-bucket prior so later passes still sample them. When no bucket
+// reaches the threshold the buckets come back unchanged, so the range only ever
+// tightens around density of interest.
+ParcelIntervalBucketWeights16 narrow_interval_bucket_weights(
+    ParcelIntervalBucketWeights16 buckets,
+    float threshold
+) {
+    int first = -1;
+    int last = -1;
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        if (sqrt(buckets.evidence[i]) >= threshold) {
+            if (first < 0)
+                first = int(i);
+            last = int(i);
+        }
+    }
+    if (first < 0)
+        return buckets;
+
+    // Keep one bucket of margin on each side so the kept span always leads in
+    // below the threshold and the crossing stays bracketed.
+    first = max(first - 1, 0);
+    last = min(last + 1, INTERVAL_BUCKET_COUNT - 1);
+
+    ParcelIntervalBucketWeights16 narrowed;
+    narrowed.parcels = buckets.parcels;
+    initialize_interval_bucket_boundaries(
+        narrowed,
+        buckets.buckets[uint(first)],
+        buckets.buckets[uint(last) + 1u]
+    );
+
+    bool observed[INTERVAL_BUCKET_COUNT];
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++)
+        observed[i] = false;
+
+    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
+        int index = find_interval_bucket(narrowed.buckets, buckets.positions[i]);
+        if (index < 0)
+            continue;
+        merge_interval_bucket_estimate(narrowed, uint(index), buckets, i);
+        if (buckets.samples[i] > 0u)
+            observed[uint(index)] = true;
+    }
+
+    apply_interval_bucket_prior(narrowed, observed);
+    return narrowed;
+}

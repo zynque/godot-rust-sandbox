@@ -8,10 +8,11 @@ use crate::parcel_test_common::{
 // SearchIntervalBucketSurfaceTester
 //
 // Compiles the isolated search_interval_bucket_surface() compute shader,
-// uploads a ray, a parcel buffer and a ready made set of interval buckets,
-// dispatches a single work-group, and verifies that it refines the first
-// threshold crossing to the surface with the guarded Newton solve, and falls
-// back to the densest bucket when no bucket crosses the threshold.
+// uploads a ray, a parcel buffer and the bucket boundaries that span the range
+// the stochastic phase narrowed to, dispatches a single work-group, and
+// verifies that the exact density scan refines the first threshold crossing to
+// the surface with the guarded Newton solve, and reports the densest sample
+// when no crossing is found.
 // ---------------------------------------------------------------------------
 
 const TEST_SHADER_PATH: &str =
@@ -23,11 +24,15 @@ const MAX_PARCELS: usize = 100;
 /// Mirrors ISOSURFACE in constants.glslinc.
 const ISOSURFACE: f32 = 0.5;
 /// Mirrors SURFACE_NEWTON_ITERATIONS in constants.glslinc.
-const SURFACE_NEWTON_ITERATIONS: usize = 12;
+const SURFACE_NEWTON_ITERATIONS: usize = 8;
 /// Mirrors SURFACE_RESIDUAL_EPSILON in constants.glslinc.
 const SURFACE_RESIDUAL_EPSILON: f32 = 1e-5;
 /// Mirrors SURFACE_SLOPE_EPSILON in constants.glslinc.
 const SURFACE_SLOPE_EPSILON: f32 = 1e-6;
+/// Mirrors INTERVAL_SURFACE_SCAN_STEP in constants.glslinc.
+const SURFACE_SCAN_STEP: f32 = 0.005;
+/// Mirrors INTERVAL_SURFACE_SCAN_MAX_STEPS in constants.glslinc.
+const SURFACE_SCAN_MAX_STEPS: f32 = 512.0;
 
 /// The guarded Newton solve can stop a pass apart between the GPU and this
 /// mirror, so the settled position and density are compared more loosely than
@@ -56,23 +61,24 @@ const fn parcel(mean: [f32; 3], inverse_variance: [f32; 3], peak_density: f32) -
 /// a ray along +z through the mean observes a known gaussian profile.
 const UNIT_PARCEL_AT_Z_10: TestParcel = parcel([0.0, 0.0, 10.0], [1.0, 1.0, 1.0], 1.0);
 const UNIT_PARCEL_AT_Z_10_6: TestParcel = parcel([0.0, 0.0, 10.6], [1.0, 1.0, 1.0], 1.0);
-/// Peaks below ISOSURFACE, so it never crosses the threshold on its own.
-const DIM_PARCEL_AT_Z_10_1: TestParcel = parcel([0.0, 0.0, 10.1], [1.0, 1.0, 1.0], 0.3);
+/// A narrow parcel peaked below ISOSURFACE, so the scan finds no crossing and
+/// the densest sample is unambiguous.
+const DIM_PARCEL_AT_Z_10_1: TestParcel = parcel([0.0, 0.0, 10.1], [1.0, 1.0, 400.0], 0.3);
 
 struct TestCase {
     label: &'static str,
     ray_origin: [f32; 3],
     ray_direction: [f32; 3],
     parcels: &'static [TestParcel],
-    /// The bucket extent along the ray. The buckets are uploaded evenly
-    /// stratified across it, matching uniform_boundaries()/uniform_positions().
+    /// The bucket extent along the ray. The boundaries are uploaded evenly
+    /// stratified across it, matching uniform_boundaries().
     front: f32,
     back: f32,
 }
 
 const TEST_CASES: &[TestCase] = &[
     TestCase {
-        label: "empty bucket set",
+        label: "empty parcel set",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[],
@@ -88,7 +94,7 @@ const TEST_CASES: &[TestCase] = &[
         back: 12.0,
     },
     TestCase {
-        label: "no crossing returns the densest bucket",
+        label: "no crossing returns the densest sample",
         ray_origin: [0.0, 0.0, 0.0],
         ray_direction: [0.0, 0.0, 1.0],
         parcels: &[DIM_PARCEL_AT_Z_10_1],
@@ -107,28 +113,13 @@ const TEST_CASES: &[TestCase] = &[
 
 /// Mirrors the evenly stratified boundaries make_interval_buckets() builds for
 /// a cluster spanning `front` to `back`.
-const fn uniform_boundaries(front: f32, back: f32) -> [f32; INTERVAL_BUCKET_POINTS] {
+fn uniform_boundaries(front: f32, back: f32) -> [f32; INTERVAL_BUCKET_POINTS] {
     let mut boundaries = [0.0f32; INTERVAL_BUCKET_POINTS];
     let span = back - front;
-    let mut i = 0;
-    while i < INTERVAL_BUCKET_POINTS {
-        boundaries[i] = front + span * i as f32 / INTERVAL_BUCKET_COUNT as f32;
-        i += 1;
+    for (i, boundary) in boundaries.iter_mut().enumerate() {
+        *boundary = front + span * i as f32 / INTERVAL_BUCKET_COUNT as f32;
     }
     boundaries
-}
-
-/// Mirrors initialize_interval_bucket_boundaries(): every estimate starts on
-/// the midpoint of its bucket.
-const fn uniform_positions(front: f32, back: f32) -> [f32; INTERVAL_BUCKET_COUNT] {
-    let boundaries = uniform_boundaries(front, back);
-    let mut positions = [0.0f32; INTERVAL_BUCKET_COUNT];
-    let mut i = 0;
-    while i < INTERVAL_BUCKET_COUNT {
-        positions[i] = 0.5 * (boundaries[i] + boundaries[i + 1]);
-        i += 1;
-    }
-    positions
 }
 
 fn ray_point(case: &TestCase, t: f32) -> [f32; 3] {
@@ -175,17 +166,6 @@ fn total_density_gradient(p: [f32; 3], parcels: &[TestParcel]) -> [f32; 3] {
     gradient
 }
 
-/// Square of the observed density at each bucket's estimated position, the
-/// evidence the search compares against the threshold.
-fn bucket_evidence(case: &TestCase, positions: &[f32; INTERVAL_BUCKET_COUNT]) -> [f32; INTERVAL_BUCKET_COUNT] {
-    let mut evidence = [0.0f32; INTERVAL_BUCKET_COUNT];
-    for i in 0..INTERVAL_BUCKET_COUNT {
-        let observed = total_density(ray_point(case, positions[i]), case.parcels);
-        evidence[i] = observed * observed;
-    }
-    evidence
-}
-
 /// Mirrors refine_surface_distance() in cluster/surface_search.glslinc.
 fn refine_surface_distance(case: &TestCase, mut lo: f32, mut hi: f32) -> f32 {
     let mut t = 0.5 * (lo + hi);
@@ -221,39 +201,46 @@ fn refine_surface_distance(case: &TestCase, mut lo: f32, mut hi: f32) -> f32 {
 }
 
 /// The (position, density, isSurface) search_interval_bucket_surface() should
-/// return for a case: the first bucket whose evidence rises past ISOSURFACE is
-/// refined, and an unbroken scan falls back to the densest bucket.
+/// return for a case: walk the span at the scan resolution and refine the first
+/// rising crossing, or report the densest sample when none is found.
 fn expected_surface(case: &TestCase) -> (f32, f32, bool) {
     if case.parcels.is_empty() {
         return (0.0, 0.0, false);
     }
 
-    let boundaries = uniform_boundaries(case.front, case.back);
-    let positions = uniform_positions(case.front, case.back);
-    let evidence = bucket_evidence(case, &positions);
+    let front = case.front;
+    let span = case.back - case.front;
+    let count = (span / SURFACE_SCAN_STEP)
+        .ceil()
+        .clamp(1.0, SURFACE_SCAN_MAX_STEPS);
+    let step = span / count;
+    let steps = count as i32;
 
-    let mut previous = boundaries[0];
-    for i in 0..INTERVAL_BUCKET_COUNT {
-        if evidence[i].sqrt() > ISOSURFACE {
-            let position = refine_surface_distance(case, previous, positions[i]);
-            let density = total_density(ray_point(case, position), case.parcels);
-            return (position, density, true);
-        }
-        previous = positions[i];
+    let front_density = total_density(ray_point(case, front), case.parcels);
+    if front_density > ISOSURFACE {
+        return (front, front_density, true);
     }
 
-    let mut densest = 0usize;
-    for i in 1..INTERVAL_BUCKET_COUNT {
-        if evidence[i] > evidence[densest] {
-            densest = i;
+    let mut previous = front;
+    let mut densest_position = front;
+    let mut densest_density = front_density;
+
+    for i in 1..=steps {
+        let t = front + step * i as f32;
+        let density = total_density(ray_point(case, t), case.parcels);
+        if density > densest_density {
+            densest_density = density;
+            densest_position = t;
         }
+        if density > ISOSURFACE {
+            let position = refine_surface_distance(case, previous, t);
+            let refined = total_density(ray_point(case, position), case.parcels);
+            return (position, refined, true);
+        }
+        previous = t;
     }
-    let position = positions[densest];
-    (
-        position,
-        total_density(ray_point(case, position), case.parcels),
-        false,
-    )
+
+    (densest_position, densest_density, false)
 }
 
 impl ParcelCase for TestCase {
@@ -283,12 +270,7 @@ impl ParcelCase for TestCase {
             data.push(parcel.peak_density);
         }
 
-        let boundaries = uniform_boundaries(self.front, self.back);
-        let positions = uniform_positions(self.front, self.back);
-        data.extend_from_slice(&boundaries);
-        data.extend_from_slice(&positions);
-        data.extend_from_slice(&bucket_evidence(self, &positions));
-
+        data.extend_from_slice(&uniform_boundaries(self.front, self.back));
         Ok(data)
     }
 

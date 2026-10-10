@@ -19,8 +19,13 @@ ParcelIntersection traceParcels(Ray ray, ParcelSet set) {
 
     ParcelIntervalBucketWeights16 buckets = make_interval_buckets(intervals);
     initialize_interval_bucket_weights(buckets, intervals, ray);
-    for (int i = 0; i < INTERVAL_BUCKET_SAMPLING_PASSES; i++)
+    for (int i = 0; i < INTERVAL_BUCKET_SAMPLING_PASSES; i++) {
         update_random_interval_bucket_weight(buckets, ray, uint(i) + 1u);
+        buckets = narrow_interval_bucket_weights(
+            buckets,
+            INTERVAL_BUCKET_NARROW_THRESHOLD_FRACTION * ISOSURFACE
+        );
+    }
 
     SurfaceSample result = search_interval_bucket_surface(buckets, ray);
     intersection.isSurface = result.isSurface;
