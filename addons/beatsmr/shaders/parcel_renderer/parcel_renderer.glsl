@@ -33,7 +33,6 @@ float iTime = 0.0;
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/surface_search.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/intervals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/tracing.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/render/scene.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/main_image.glslinc"
 
 void main() {

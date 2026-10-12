@@ -54,6 +54,7 @@ impl ParcelRendererNode {
     fn resources_ready(&self) -> bool {
         self.texture_rid != Rid::Invalid
             && self.time_buffer_rid != Rid::Invalid
+            && self.parcel_buffer_rid != Rid::Invalid
             && self.shader_rid != Rid::Invalid
             && self.pipeline_rid != Rid::Invalid
             && self.uniform_set_rid != Rid::Invalid
@@ -150,6 +151,21 @@ impl ParcelRendererNode {
                 }
                 let packed = PackedByteArray::from(bytes.as_slice());
                 let _ = rd.buffer_update(self.time_buffer_rid, 0, 16, &packed);
+            }
+
+            if self.parcel_buffer_rid != Rid::Invalid {
+                let parcels = ParcelRendererNode::sample_parcel_buffer(self.time_seconds);
+                let mut bytes = Vec::with_capacity(parcels.len() * std::mem::size_of::<f32>());
+                for value in parcels {
+                    bytes.extend_from_slice(&value.to_le_bytes());
+                }
+                let packed = PackedByteArray::from(bytes.as_slice());
+                let _ = rd.buffer_update(
+                    self.parcel_buffer_rid,
+                    0,
+                    ParcelRendererNode::parcel_buffer_size_bytes(),
+                    &packed,
+                );
             }
 
             let list = rd.compute_list_begin();

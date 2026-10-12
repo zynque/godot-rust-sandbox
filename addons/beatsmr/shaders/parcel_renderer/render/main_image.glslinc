@@ -2,11 +2,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     vec2 uv = normalizeScreenCoordinates(fragCoord);
 
-    Parcel[3] parcels = getParcels();
     ParcelSet set;
     set.size = 3u;
     for (uint i = 0u; i < set.size; i++) {
-        parcel_buffer[i] = parcels[i];
         set.indices[i] = i;
     }
 

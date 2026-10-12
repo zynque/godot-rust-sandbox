@@ -1,2 +1,4 @@
+layout(set = 0, binding = 2, std430) buffer ParcelBuffer {
+    Parcel parcel_buffer[];
+};
 
-Parcel[MAX_PARCELS] parcel_buffer;
