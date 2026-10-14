@@ -8,6 +8,11 @@ layout(set = 0, binding = 1, std140) uniform TimeParams {
 	vec4 t;
 } time_params;
 
+layout(set = 0, binding = 2, std140) uniform CameraParams {
+    mat4 view;
+    mat4 projection;
+} camera_params;
+
 vec3 iResolution = vec3(1.0);
 float iTime = 0.0;
 

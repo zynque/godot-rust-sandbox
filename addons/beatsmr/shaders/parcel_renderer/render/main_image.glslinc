@@ -1,15 +1,42 @@
+vec3 getCameraPosition() {
+    return (inverse(camera_params.view) * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+}
+
+vec3 getCameraDirection(vec2 fragCoord) {
+    vec2 normalized = (fragCoord / iResolution.xy) * 2.0 - 1.0;
+    normalized.y = -normalized.y;
+
+    vec4 nearClip = vec4(normalized, -1.0, 1.0);
+    vec4 farClip = vec4(normalized, 1.0, 1.0);
+
+    vec4 nearView = inverse(camera_params.projection) * nearClip;
+    vec4 farView = inverse(camera_params.projection) * farClip;
+    nearView /= nearView.w;
+    farView /= farView.w;
+
+    vec4 nearWorld = inverse(camera_params.view) * nearView;
+    vec4 farWorld = inverse(camera_params.view) * farView;
+    return normalize((farWorld.xyz - nearWorld.xyz));
+}
+
 void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
-    vec2 uv = normalizeScreenCoordinates(fragCoord);
-
     ParcelSet set;
-    set.size = 3u;
+    set.size = 6u;
     for (uint i = 0u; i < set.size; i++) {
         set.indices[i] = i;
     }
 
-    vec3 cameraPosition = vec3(.5, 1.5, 0);
-    vec3 cameraDirection = normalize(vec3(uv.x, uv.y, -1));
+    vec3 cameraPosition = getCameraPosition();
+    if (length(cameraPosition) < 0.0001) {
+        cameraPosition = vec3(0.0, 1.0, 5.0);
+    }
+
+    vec3 cameraDirection = getCameraDirection(fragCoord);
+    if (length(cameraDirection) < 0.0001) {
+        cameraDirection = vec3(0.0, 0.0, -1.0);
+    }
+
     Ray ray = Ray(cameraPosition, cameraDirection);
     ParcelIntersection intersection = traceParcels(ray, set);
 
@@ -22,5 +49,5 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
         color = intersection.density;
     }
 
-    fragColor = vec4(vec3(color * vec3(0.25, 0.75, 0.35)), 1.0);
+    fragColor = vec4(vec3(color), 1.0);
 }

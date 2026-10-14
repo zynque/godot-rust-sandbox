@@ -1,5 +1,5 @@
 use godot::classes::rendering_device::{DataFormat, ShaderStage, TextureUsageBits, UniformType};
-use godot::classes::{ProjectSettings, RdShaderFile, RdTextureFormat, RdTextureView, RdUniform, RenderingDevice};
+use godot::classes::{Camera3D, ProjectSettings, RdShaderFile, RdTextureFormat, RdTextureView, RdUniform, RenderingDevice};
 use godot::prelude::*;
 
 use super::{ParcelRendererNode, SHADER_PATH};
@@ -135,7 +135,52 @@ fn inverse_covariance_from_shape(shape: ParcelShape) -> GpuMat3 {
     flatten_mat3(matrix)
 }
 
-fn sample_parcels_for_time(time_seconds: f32) -> [ParcelGpu; 3] {
+fn transform3d_to_mat4_cols(transform: Transform3D) -> [f32; 16] {
+    let cols = transform.basis.to_cols();
+    let a = cols[0];
+    let b = cols[1];
+    let c = cols[2];
+    let o = transform.origin;
+
+    [
+        a.x, a.y, a.z, 0.0,
+        b.x, b.y, b.z, 0.0,
+        c.x, c.y, c.z, 0.0,
+        o.x, o.y, o.z, 1.0,
+    ]
+}
+
+fn projection_to_mat4_cols(projection: Projection) -> [f32; 16] {
+    let x = projection.cols[0];
+    let y = projection.cols[1];
+    let z = projection.cols[2];
+    let w = projection.cols[3];
+
+    [
+        x.x, x.y, x.z, x.w,
+        y.x, y.y, y.z, y.w,
+        z.x, z.y, z.z, z.w,
+        w.x, w.y, w.z, w.w,
+    ]
+}
+
+fn camera_uniform_bytes(camera_transform: Transform3D, camera_projection: Projection) -> PackedByteArray {
+    let view = camera_transform.affine_inverse();
+    let view_floats = transform3d_to_mat4_cols(view);
+    let projection_floats = projection_to_mat4_cols(camera_projection);
+
+    let mut bytes = Vec::with_capacity(32 * std::mem::size_of::<f32>());
+    for f in view_floats {
+        bytes.extend_from_slice(&f.to_le_bytes());
+    }
+    for f in projection_floats {
+        bytes.extend_from_slice(&f.to_le_bytes());
+    }
+
+    PackedByteArray::from(bytes.as_slice())
+}
+
+fn sample_parcels_for_time(time_seconds: f32) -> [ParcelGpu; 6] {
     let c = (0.8 * time_seconds).cos();
 
     fn make_parcel(mean: Vector3, shape: ParcelShape, peak_density: f32, color: Vector3) -> ParcelGpu {
@@ -173,10 +218,41 @@ fn sample_parcels_for_time(time_seconds: f32) -> [ParcelGpu; 3] {
         height: 0.05,
     };
 
-    [
+    let sample_parcels = [
         make_parcel(Vector3::new(-0.6 * c, 1.0, -3.0), shape_a, 0.8, Vector3::new(0.25, 0.75, 0.35)),
         make_parcel(Vector3::new(0.6 * c, 1.0, -3.0), shape_b, 0.8, Vector3::new(0.25, 0.75, 0.35)),
         make_parcel(Vector3::new(0.0, 1.0, -3.0), shape_c, 0.8, Vector3::new(0.25, 0.75, 0.35)),
+    ];
+
+    let axis_x = ParcelShape {
+        forward: Vector3::RIGHT,
+        normal: Vector3::UP,
+        axis_length: 18.0,
+        width: 0.1,
+        height: 0.1,
+    };
+    let axis_y = ParcelShape {
+        forward: Vector3::UP,
+        normal: Vector3::BACK,
+        axis_length: 18.0,
+        width: 0.1,
+        height: 0.1,
+    };
+    let axis_z = ParcelShape {
+        forward: Vector3::BACK,
+        normal: Vector3::UP,
+        axis_length: 18.0,
+        width: 0.1,
+        height: 0.1,
+    };
+
+    [
+        make_parcel(Vector3::new(-4.0,0.0,-5.0), axis_x, 1.0, Vector3::new(1.0, 0.0, 0.0)),
+        make_parcel(Vector3::new(0.0,-4.0,-5.0), axis_y, 1.0, Vector3::new(0.0, 1.0, 0.0)),
+        make_parcel(Vector3::new(0.0,0.0,-7.0), axis_z, 1.0, Vector3::new(0.0, 0.2, 1.0)),
+        sample_parcels[0],
+        sample_parcels[1],
+        sample_parcels[2],
     ]
 }
 
@@ -197,6 +273,31 @@ impl ParcelRendererNode {
 
         values
     }
+
+    pub(super) fn camera_data_for_frame(&mut self) -> PackedByteArray {
+        if let Some(vp) = self.base().get_viewport() {
+            if let Some(camera) = vp.get_camera_3d() {
+                return camera_uniform_bytes(
+                    camera.get_camera_transform(),
+                    camera.get_camera_projection(),
+                );
+            }
+        }
+
+        if let Some(camera) = self
+            .base()
+            .try_get_node_as::<Camera3D>("../Camera3D")
+            .or_else(|| self.base().try_get_node_as::<Camera3D>("Camera3D"))
+        {
+            return camera_uniform_bytes(
+                camera.get_camera_transform(),
+                camera.get_camera_projection(),
+            );
+        }
+
+        camera_uniform_bytes(Transform3D::IDENTITY, Projection::IDENTITY)
+    }
+
     pub(super) fn destroy_resources(&mut self, rd: &mut Gd<RenderingDevice>) {
         if self.uniform_set_rid != Rid::Invalid {
             rd.free_rid(self.uniform_set_rid);
@@ -217,6 +318,10 @@ impl ParcelRendererNode {
         if self.time_buffer_rid != Rid::Invalid {
             rd.free_rid(self.time_buffer_rid);
             self.time_buffer_rid = Rid::Invalid;
+        }
+        if self.camera_buffer_rid != Rid::Invalid {
+            rd.free_rid(self.camera_buffer_rid);
+            self.camera_buffer_rid = Rid::Invalid;
         }
         if self.parcel_buffer_rid != Rid::Invalid {
             rd.free_rid(self.parcel_buffer_rid);
@@ -265,6 +370,13 @@ impl ParcelRendererNode {
         }
     }
 
+    fn create_camera_buffer(&mut self, rd: &mut Gd<RenderingDevice>) {
+        self.camera_buffer_rid = rd.uniform_buffer_create(128);
+        if self.camera_buffer_rid == Rid::Invalid {
+            godot_warn!("ParcelRendererNode: failed to create camera uniform buffer.");
+        }
+    }
+
     fn create_parcel_buffer(&mut self, rd: &mut Gd<RenderingDevice>) {
         let byte_count = Self::parcel_buffer_size_bytes();
         let initial_data = PackedByteArray::from(vec![0u8; byte_count as usize].as_slice());
@@ -307,6 +419,11 @@ impl ParcelRendererNode {
 
         self.create_time_buffer(rd);
         if self.time_buffer_rid == Rid::Invalid {
+            return;
+        }
+
+        self.create_camera_buffer(rd);
+        if self.camera_buffer_rid == Rid::Invalid {
             return;
         }
 
@@ -376,19 +493,24 @@ impl ParcelRendererNode {
         time_uniform.set_binding(1);
         time_uniform.add_id(self.time_buffer_rid);
 
+        let mut camera_uniform = RdUniform::new_gd();
+        camera_uniform.set_uniform_type(UniformType::UNIFORM_BUFFER);
+        camera_uniform.set_binding(2);
+        camera_uniform.add_id(self.camera_buffer_rid);
+
         let mut parcel_uniform = RdUniform::new_gd();
         parcel_uniform.set_uniform_type(UniformType::STORAGE_BUFFER);
-        parcel_uniform.set_binding(2);
+        parcel_uniform.set_binding(3);
         parcel_uniform.add_id(self.parcel_buffer_rid);
 
         self.uniform_set_rid = rd.uniform_set_create(
-            &Array::from_iter([output_image, time_uniform, parcel_uniform]),
+            &Array::from_iter([output_image, time_uniform, camera_uniform, parcel_uniform]),
             self.shader_rid,
             0,
         );
         if self.uniform_set_rid == Rid::Invalid {
             godot_warn!(
-                "ParcelRendererNode: failed to create uniform set (set=0, binding=0 image, binding=1 iTime, binding=2 parcels)."
+                "ParcelRendererNode: failed to create uniform set (set=0, binding=0 image, binding=1 iTime, binding=2 camera, binding=3 parcels)."
             );
         }
     }

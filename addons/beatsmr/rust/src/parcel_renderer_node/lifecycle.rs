@@ -54,6 +54,7 @@ impl ParcelRendererNode {
     fn resources_ready(&self) -> bool {
         self.texture_rid != Rid::Invalid
             && self.time_buffer_rid != Rid::Invalid
+            && self.camera_buffer_rid != Rid::Invalid
             && self.parcel_buffer_rid != Rid::Invalid
             && self.shader_rid != Rid::Invalid
             && self.pipeline_rid != Rid::Invalid
@@ -151,6 +152,11 @@ impl ParcelRendererNode {
                 }
                 let packed = PackedByteArray::from(bytes.as_slice());
                 let _ = rd.buffer_update(self.time_buffer_rid, 0, 16, &packed);
+            }
+
+            let camera_data = self.camera_data_for_frame();
+            if self.camera_buffer_rid != Rid::Invalid {
+                let _ = rd.buffer_update(self.camera_buffer_rid, 0, 128, &camera_data);
             }
 
             if self.parcel_buffer_rid != Rid::Invalid {

@@ -1,3 +1,6 @@
 [gd_scene format=3 uid="uid://823qgp6fn0l7"]
 
 [node name="ParcelRendererTest" type="ParcelRendererNode"]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.9596659, -0.113184355, 0.25735337, 0.043849196, 0.9644376, 0.26064813, -0.27770254, -0.2388504, 0.93050086, 2.5332873, 1.4596682, 7.4736285)

@@ -1,4 +1,4 @@
-layout(set = 0, binding = 2, std430) buffer ParcelBuffer {
+layout(set = 0, binding = 3, std430) buffer ParcelBuffer {
     Parcel parcel_buffer[];
 };
 
