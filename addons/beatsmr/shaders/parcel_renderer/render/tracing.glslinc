@@ -1,38 +1,68 @@
 // Traces a ray against the parcels in `set` for the first density threshold
-// crossing that marks a solid surface. The ray's parcel intervals are
-// stratified into buckets, the buckets are refined with stochastic density
-// observations, and the estimates are searched for the crossing, which is
-// refined with a guarded Newton solve (see search_interval_bucket_surface).
-// When no crossing is observed the densest bucket stands in.
+// crossing that marks a solid surface. The ray's parcel intervals are grouped
+// into overlapping clusters, each cluster is searched in turn, and we keep
+// walking the ray until either a solid surface is found or every cluster has
+// been evaluated. This allows a later parcel cluster to contribute visible
+// density even when a nearer set of parcels does not produce a valid surface.
 ParcelIntersection traceParcels(Ray ray, ParcelSet set) {
-    ParcelIntersection intersection;
-    intersection.isSurface = false;
-    intersection.density = 0.0;
-    intersection.point = ray.origin;
-    intersection.normal = -ray.direction;
+    ParcelIntersection empty;
+    empty.isSurface = false;
+    empty.density = 0.0;
+    empty.point = ray.origin;
+    empty.normal = -ray.direction;
 
     ParcelIntervals intervals = intersect_parcels(ray, set);
     if (intervals.size == 0u)
-        return intersection;
+        return empty;
 
     sort_intervals(intervals);
 
-    ParcelIntervalBucketWeights16 buckets = make_interval_buckets(intervals);
-    initialize_interval_bucket_weights(buckets, intervals, ray);
-    for (int i = 0; i < INTERVAL_BUCKET_SAMPLING_PASSES; i++) {
-        update_random_interval_bucket_weight(buckets, ray, uint(i) + 1u);
-        buckets = narrow_interval_bucket_weights(
-            buckets,
-            INTERVAL_BUCKET_NARROW_THRESHOLD_FRACTION * ISOSURFACE
-        );
+    ParcelIntersection best = empty;
+    uint cluster_start = 0u;
+    while (cluster_start < intervals.size) {
+        uint cluster_size = 1u;
+        while (cluster_start + cluster_size < intervals.size &&
+               intervals_overlap(intervals.items[cluster_start], intervals.items[cluster_start + cluster_size])) {
+            cluster_size++;
+        }
+
+        ParcelIntervals cluster;
+        cluster.size = cluster_size;
+        for (uint i = 0u; i < cluster_size; i++) {
+            cluster.items[i] = intervals.items[cluster_start + i];
+        }
+
+        ParcelIntervalBucketWeights16 buckets = make_interval_buckets(cluster);
+        initialize_interval_bucket_weights(buckets, cluster, ray);
+        for (int i = 0; i < INTERVAL_BUCKET_SAMPLING_PASSES; i++) {
+            update_random_interval_bucket_weight(buckets, ray, uint(i) + 1u);
+            buckets = narrow_interval_bucket_weights(
+                buckets,
+                INTERVAL_BUCKET_NARROW_THRESHOLD_FRACTION * ISOSURFACE
+            );
+        }
+
+        SurfaceSample result = search_interval_bucket_surface(buckets, ray);
+        if (result.isSurface) {
+            ParcelIntersection intersection;
+            intersection.isSurface = true;
+            intersection.density = result.density;
+            intersection.point = ray.origin + result.position * ray.direction;
+            intersection.normal = normalize(-total_parcel_density_gradient(intersection.point, set));
+            return intersection;
+        }
+
+        if (result.density > best.density) {
+            best.isSurface = false;
+            best.density = result.density;
+            best.point = ray.origin + result.position * ray.direction;
+            best.normal = normalize(-total_parcel_density_gradient(best.point, set));
+        }
+
+        cluster_start += cluster_size;
     }
 
-    SurfaceSample result = search_interval_bucket_surface(buckets, ray);
-    intersection.isSurface = result.isSurface;
-    intersection.density = result.density;
-    intersection.point = ray.origin + result.position * ray.direction;
-    intersection.normal = normalize(-total_parcel_density_gradient(intersection.point, set));
-    return intersection;
+    return best;
 }
 
 float getLight(vec3 p, vec3 normal) {
