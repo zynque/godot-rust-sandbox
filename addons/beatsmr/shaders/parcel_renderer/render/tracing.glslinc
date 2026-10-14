@@ -1,3 +1,79 @@
+vec3 dominant_parcel_color(vec3 p, ParcelSet set) {
+    vec3 color = vec3(0.0);
+    float best_density = -1.0;
+
+    for (uint i = 0u; i < set.size; i++) {
+        Parcel parcel = parcel_buffer[set.indices[i]];
+        float density = parcelDensity(p, parcel);
+        if (density > best_density) {
+            best_density = density;
+            color = parcel.color;
+        }
+    }
+
+    return color;
+}
+
+ParcelIntersection make_empty_intersection(Ray ray) {
+    ParcelIntersection empty;
+    empty.isSurface = false;
+    empty.density = 0.0;
+    empty.point = ray.origin;
+    empty.normal = -ray.direction;
+    empty.color = vec3(0.0);
+    return empty;
+}
+
+void copy_cluster(ParcelIntervals source, inout ParcelIntervals cluster, uint start_index, uint cluster_size) {
+    cluster.size = cluster_size;
+    for (uint i = 0u; i < cluster_size; i++) {
+        cluster.items[i] = source.items[start_index + i];
+    }
+}
+
+ParcelIntervals build_cluster(ParcelIntervals intervals, uint cluster_start) {
+    ParcelIntervals cluster;
+    uint cluster_size = 1u;
+
+    while (cluster_start + cluster_size < intervals.size &&
+           intervals_overlap(intervals.items[cluster_start], intervals.items[cluster_start + cluster_size])) {
+        cluster_size++;
+    }
+
+    copy_cluster(intervals, cluster, cluster_start, cluster_size);
+    return cluster;
+}
+
+SurfaceSample evaluate_cluster_surface(Ray ray, ParcelIntervals cluster, ParcelSet set) {
+    ParcelIntervalBucketWeights16 buckets = make_interval_buckets(cluster);
+    initialize_interval_bucket_weights(buckets, cluster, ray);
+
+    for (int i = 0; i < INTERVAL_BUCKET_SAMPLING_PASSES; i++) {
+        update_random_interval_bucket_weight(buckets, ray, uint(i) + 1u);
+        buckets = narrow_interval_bucket_weights(
+            buckets,
+            INTERVAL_BUCKET_NARROW_THRESHOLD_FRACTION * ISOSURFACE
+        );
+    }
+
+    SurfaceSample result = search_interval_bucket_surface(buckets, ray);
+    if (result.isSurface) {
+        return result;
+    }
+
+    return result;
+}
+
+ParcelIntersection make_surface_intersection(Ray ray, SurfaceSample surface_sample, ParcelSet set) {
+    ParcelIntersection intersection;
+    intersection.isSurface = surface_sample.isSurface;
+    intersection.density = surface_sample.density;
+    intersection.point = ray.origin + surface_sample.position * ray.direction;
+    intersection.normal = normalize(-total_parcel_density_gradient(intersection.point, set));
+    intersection.color = dominant_parcel_color(intersection.point, set);
+    return intersection;
+}
+
 // Traces a ray against the parcels in `set` for the first density threshold
 // crossing that marks a solid surface. The ray's parcel intervals are grouped
 // into overlapping clusters, each cluster is searched in turn, and we keep
@@ -5,11 +81,7 @@
 // been evaluated. This allows a later parcel cluster to contribute visible
 // density even when a nearer set of parcels does not produce a valid surface.
 ParcelIntersection traceParcels(Ray ray, ParcelSet set) {
-    ParcelIntersection empty;
-    empty.isSurface = false;
-    empty.density = 0.0;
-    empty.point = ray.origin;
-    empty.normal = -ray.direction;
+    ParcelIntersection empty = make_empty_intersection(ray);
 
     ParcelIntervals intervals = intersect_parcels(ray, set);
     if (intervals.size == 0u)
@@ -20,46 +92,19 @@ ParcelIntersection traceParcels(Ray ray, ParcelSet set) {
     ParcelIntersection best = empty;
     uint cluster_start = 0u;
     while (cluster_start < intervals.size) {
-        uint cluster_size = 1u;
-        while (cluster_start + cluster_size < intervals.size &&
-               intervals_overlap(intervals.items[cluster_start], intervals.items[cluster_start + cluster_size])) {
-            cluster_size++;
+        ParcelIntervals cluster = build_cluster(intervals, cluster_start);
+        SurfaceSample surface_sample = evaluate_cluster_surface(ray, cluster, set);
+
+        if (surface_sample.isSurface) {
+            return make_surface_intersection(ray, surface_sample, set);
         }
 
-        ParcelIntervals cluster;
-        cluster.size = cluster_size;
-        for (uint i = 0u; i < cluster_size; i++) {
-            cluster.items[i] = intervals.items[cluster_start + i];
-        }
-
-        ParcelIntervalBucketWeights16 buckets = make_interval_buckets(cluster);
-        initialize_interval_bucket_weights(buckets, cluster, ray);
-        for (int i = 0; i < INTERVAL_BUCKET_SAMPLING_PASSES; i++) {
-            update_random_interval_bucket_weight(buckets, ray, uint(i) + 1u);
-            buckets = narrow_interval_bucket_weights(
-                buckets,
-                INTERVAL_BUCKET_NARROW_THRESHOLD_FRACTION * ISOSURFACE
-            );
-        }
-
-        SurfaceSample result = search_interval_bucket_surface(buckets, ray);
-        if (result.isSurface) {
-            ParcelIntersection intersection;
-            intersection.isSurface = true;
-            intersection.density = result.density;
-            intersection.point = ray.origin + result.position * ray.direction;
-            intersection.normal = normalize(-total_parcel_density_gradient(intersection.point, set));
-            return intersection;
-        }
-
-        if (result.density > best.density) {
+        if (surface_sample.density > best.density) {
+            best = make_surface_intersection(ray, surface_sample, set);
             best.isSurface = false;
-            best.density = result.density;
-            best.point = ray.origin + result.position * ray.direction;
-            best.normal = normalize(-total_parcel_density_gradient(best.point, set));
         }
 
-        cluster_start += cluster_size;
+        cluster_start += cluster.size;
     }
 
     return best;

@@ -40,14 +40,18 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
     Ray ray = Ray(cameraPosition, cameraDirection);
     ParcelIntersection intersection = traceParcels(ray, set);
 
-    float color;
-    if (intersection.isSurface) {
-        float light = getLight(intersection.point, intersection.normal);
-        color = max(light, intersection.density);
-    }
-    else {
-        color = intersection.density;
+    vec3 color = intersection.color;
+    if (length(color) < 0.0001) {
+        color = vec3(intersection.density);
     }
 
-    fragColor = vec4(vec3(color), 1.0);
+    if (intersection.isSurface) {
+        float light = getLight(intersection.point, intersection.normal);
+        color *= max(light, 0.15);
+    }
+    else {
+        color *= clamp(intersection.density, 0.0, 1.0);
+    }
+
+    fragColor = vec4(color, 1.0);
 }

@@ -21,6 +21,7 @@ struct ParcelIntersection {
     float density;
     vec3 point;
     vec3 normal;
+    vec3 color;
 };
 
 // Outcome of searching a ray's interval buckets for matter: where along the

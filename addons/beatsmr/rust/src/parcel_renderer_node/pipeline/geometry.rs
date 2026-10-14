@@ -224,22 +224,22 @@ pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> [ParcelGpu; 6] {
         forward: Vector3::RIGHT,
         normal: Vector3::UP,
         axis_length: 18.0,
-        width: 0.1,
-        height: 0.1,
+        width: 0.01,
+        height: 0.01,
     };
     let axis_y = ParcelShape {
         forward: Vector3::UP,
         normal: Vector3::BACK,
         axis_length: 18.0,
-        width: 0.1,
-        height: 0.1,
+        width: 0.01,
+        height: 0.01,
     };
     let axis_z = ParcelShape {
         forward: Vector3::BACK,
         normal: Vector3::UP,
         axis_length: 18.0,
-        width: 0.1,
-        height: 0.1,
+        width: 0.01,
+        height: 0.01,
     };
 
     [
