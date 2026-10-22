@@ -29,6 +29,10 @@ impl ComputeHarness {
     /// Uploads `input` to binding 0, dispatches one work-group, and returns
     /// `output_floats` floats read back from binding 1.
     pub fn dispatch(&mut self, input: &[f32], output_floats: usize) -> Result<Vec<f32>, String> {
+        const PARCEL_BUFFER_PARCELS: u32 = 100;
+        const PARCEL_BUFFER_FLOATS_PER_PARCEL: u32 = 25;
+        const PARCEL_BUFFER_BYTES: u32 = PARCEL_BUFFER_PARCELS * PARCEL_BUFFER_FLOATS_PER_PARCEL * 4;
+
         let mut input_bytes = Vec::with_capacity(input.len() * std::mem::size_of::<f32>());
         for value in input {
             input_bytes.extend_from_slice(&value.to_le_bytes());
@@ -56,6 +60,18 @@ impl ComputeHarness {
             return Err("failed to create output storage buffer".into());
         }
 
+        let parcel_zeroed = PackedByteArray::from(vec![0u8; PARCEL_BUFFER_BYTES as usize].as_slice());
+        let parcel_buffer_rid = self
+            .rd
+            .storage_buffer_create_ex(PARCEL_BUFFER_BYTES)
+            .data(&parcel_zeroed)
+            .done();
+        if parcel_buffer_rid == Rid::Invalid {
+            self.rd.free_rid(input_buffer_rid);
+            self.rd.free_rid(output_buffer_rid);
+            return Err("failed to create parcel storage buffer".into());
+        }
+
         let uniform_set_rid = {
             let mut input_uniform = RdUniform::new_gd();
             input_uniform.set_uniform_type(UniformType::STORAGE_BUFFER);
@@ -67,8 +83,13 @@ impl ComputeHarness {
             output_uniform.set_binding(1);
             output_uniform.add_id(output_buffer_rid);
 
+            let mut parcel_uniform = RdUniform::new_gd();
+            parcel_uniform.set_uniform_type(UniformType::STORAGE_BUFFER);
+            parcel_uniform.set_binding(3);
+            parcel_uniform.add_id(parcel_buffer_rid);
+
             self.rd.uniform_set_create(
-                &Array::from_iter([input_uniform, output_uniform]),
+                &Array::from_iter([input_uniform, output_uniform, parcel_uniform]),
                 self.shader_rid,
                 0,
             )
@@ -76,6 +97,7 @@ impl ComputeHarness {
         if uniform_set_rid == Rid::Invalid {
             self.rd.free_rid(input_buffer_rid);
             self.rd.free_rid(output_buffer_rid);
+            self.rd.free_rid(parcel_buffer_rid);
             return Err("failed to create uniform set".into());
         }
 
@@ -95,6 +117,7 @@ impl ComputeHarness {
         self.rd.free_rid(uniform_set_rid);
         self.rd.free_rid(input_buffer_rid);
         self.rd.free_rid(output_buffer_rid);
+        self.rd.free_rid(parcel_buffer_rid);
 
         if result.len() < output_byte_count as usize {
             return Err(format!(
