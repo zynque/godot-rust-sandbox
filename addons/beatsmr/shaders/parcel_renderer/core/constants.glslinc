@@ -8,17 +8,18 @@
 #define PARCEL_BOUND_SIGMAS 3.0
 #define MAX_CLUSTER 10
 
-#define MAX_PARCELS 100
+#define MAX_PARCELS 30
+#define SCENE_PARCEL_COUNT MAX_PARCELS
 
 // intersect_parcels() returns at most one interval per parcel in the set.
 #define MAX_PARCEL_INTERVALS MAX_PARCELS
 
-#define MAX_PARCELS_PER_BATCH 100
+#define MAX_PARCELS_PER_BATCH 30
 
 // ParcelIntervalBucketWeights16 stratifies a cluster into this many buckets
 // using one more boundary position than there are buckets.
-#define INTERVAL_BUCKET_COUNT 16
-#define INTERVAL_BUCKET_POINTS 17
+#define INTERVAL_BUCKET_COUNT 8
+#define INTERVAL_BUCKET_POINTS 9
 
 // update_random_interval_bucket_weight() picks a bucket with probability
 // proportional to evidence * (deviation + this floor). The floor keeps a
@@ -35,7 +36,7 @@
 // density residual drops below SURFACE_RESIDUAL_EPSILON, or whenever the
 // ray-aligned slope is too shallow to divide by (below SURFACE_SLOPE_EPSILON)
 // or the Newton step would leave the bracket, in which case it bisects instead.
-#define SURFACE_NEWTON_ITERATIONS 8
+#define SURFACE_NEWTON_ITERATIONS 5
 #define SURFACE_RESIDUAL_EPSILON 1e-5
 #define SURFACE_SLOPE_EPSILON 1e-6
 
@@ -44,12 +45,12 @@
 // count within the cap. The step matches the old marching resolution but only
 // spans the narrowed range, which is usually tiny.
 #define INTERVAL_SURFACE_SCAN_STEP 0.005
-#define INTERVAL_SURFACE_SCAN_MAX_STEPS 512
+#define INTERVAL_SURFACE_SCAN_MAX_STEPS 64
 
 // traceParcels() folds this many stochastic density observations into the
 // bucket estimates before searching them for the surface, so every bucket has
 // evidence to compare against the threshold.
-#define INTERVAL_BUCKET_SAMPLING_PASSES 32
+#define INTERVAL_BUCKET_SAMPLING_PASSES 16
 
 // Each sampling pass narrows the bucket range with
 // narrow_interval_bucket_weights(): the leading and trailing buckets whose

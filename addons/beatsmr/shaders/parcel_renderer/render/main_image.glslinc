@@ -22,7 +22,7 @@ vec3 getCameraDirection(vec2 fragCoord) {
 void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     ParcelSet set;
-    set.size = 6u;
+    set.size = SCENE_PARCEL_COUNT;
     for (uint i = 0u; i < set.size; i++) {
         set.indices[i] = i;
     }

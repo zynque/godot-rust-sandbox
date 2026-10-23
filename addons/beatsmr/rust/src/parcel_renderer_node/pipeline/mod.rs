@@ -3,6 +3,7 @@ use godot::prelude::*;
 
 mod geometry;
 mod resources;
+mod tree;
 
 use geometry::{camera_uniform_bytes, sample_parcels_for_time, PARCEL_FLOATS_PER_INSTANCE};
 use super::ParcelRendererNode;
@@ -14,7 +15,16 @@ impl ParcelRendererNode {
 
     pub(super) fn sample_parcel_buffer(time_seconds: f32) -> Vec<f32> {
         let parcels = sample_parcels_for_time(time_seconds);
-        let mut values = vec![0.0f32; geometry::MAX_PARCELS * PARCEL_FLOATS_PER_INSTANCE];
+        static BUFFER_UPLOAD_LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !BUFFER_UPLOAD_LOGGED.load(std::sync::atomic::Ordering::Relaxed) {
+            godot_print!(
+                "scene buffer upload: {} parcels (capacity: {})",
+                parcels.len(),
+                geometry::SCENE_PARCEL_COUNT,
+            );
+            BUFFER_UPLOAD_LOGGED.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        let mut values = vec![0.0f32; geometry::SCENE_PARCEL_COUNT * PARCEL_FLOATS_PER_INSTANCE];
 
         for (index, parcel) in parcels.iter().enumerate() {
             let start = index * PARCEL_FLOATS_PER_INSTANCE;

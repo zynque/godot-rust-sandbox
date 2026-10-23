@@ -1,4 +1,8 @@
+use std::sync::OnceLock;
+
 use godot::prelude::*;
+
+use super::tree;
 
 pub(crate) type GpuVec3 = [f32; 4];
 pub(crate) type GpuMat3 = [f32; 12];
@@ -14,6 +18,19 @@ pub(crate) struct ParcelGpu {
     pub color: GpuVec3,
 }
 
+impl Default for ParcelGpu {
+    fn default() -> Self {
+        Self {
+            mean: [0.0; 4],
+            covariance: [0.0; 12],
+            inverse_covariance: [0.0; 12],
+            peak_density: 0.0,
+            peak_padding: [0.0; 3],
+            color: [0.0; 4],
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct ParcelShape {
     pub forward: Vector3,
@@ -23,7 +40,8 @@ pub(crate) struct ParcelShape {
     pub height: f32,
 }
 
-pub(crate) const MAX_PARCELS: usize = 100;
+pub(crate) const MAX_PARCELS: usize = 30;
+pub(crate) const SCENE_PARCEL_COUNT: usize = MAX_PARCELS;
 pub(crate) const PARCEL_FLOATS_PER_INSTANCE: usize = 36;
 
 impl ParcelGpu {
@@ -48,12 +66,31 @@ impl ParcelGpu {
 }
 
 fn orthogonalize(v1: Vector3, v2: Vector3) -> Vector3 {
-    let projection = v1 * v2.dot(v1);
+    let v1_norm = if v1.length_squared() <= f32::EPSILON {
+        Vector3::UP
+    } else {
+        v1.normalized()
+    };
+    let projection = v1_norm * v2.dot(v1_norm);
     let result = v2 - projection;
-    if result.length_squared() <= f32::EPSILON {
-        return Vector3::UP;
+    if result.length_squared() > f32::EPSILON {
+        return result.normalized();
     }
-    result.normalized()
+
+    let fallback = if v1_norm.x.abs() < 0.9 {
+        Vector3::RIGHT
+    } else if v1_norm.y.abs() < 0.9 {
+        Vector3::UP
+    } else {
+        Vector3::BACK
+    };
+
+    let fallback_result = fallback - fallback.dot(v1_norm) * v1_norm;
+    if fallback_result.length_squared() > f32::EPSILON {
+        fallback_result.normalized()
+    } else {
+        Vector3::UP
+    }
 }
 
 fn vector_component(v: Vector3, axis: usize) -> f32 {
@@ -176,7 +213,9 @@ pub(crate) fn camera_uniform_bytes(camera_transform: Transform3D, camera_project
     PackedByteArray::from(bytes.as_slice())
 }
 
-pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> [ParcelGpu; 6] {
+static TREE_PARCELS: OnceLock<Vec<ParcelGpu>> = OnceLock::new();
+
+pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> Vec<ParcelGpu> {
     let c = (0.8 * time_seconds).cos();
 
     fn make_parcel(mean: Vector3, shape: ParcelShape, peak_density: f32, color: Vector3) -> ParcelGpu {
@@ -215,9 +254,9 @@ pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> [ParcelGpu; 6] {
     };
 
     let sample_parcels = [
-        make_parcel(Vector3::new(-0.6 * c, 1.0, -3.0), shape_a, 0.8, Vector3::new(0.25, 0.75, 0.35)),
-        make_parcel(Vector3::new(0.6 * c, 1.0, -3.0), shape_b, 0.8, Vector3::new(0.25, 0.75, 0.35)),
-        make_parcel(Vector3::new(0.0, 1.0, -3.0), shape_c, 0.8, Vector3::new(0.25, 0.75, 0.35)),
+        make_parcel(Vector3::new(-0.6 * c + 4.0, 2.0, -4.0), shape_a, 0.8, Vector3::new(0.25, 0.75, 0.35)),
+        make_parcel(Vector3::new(0.6 * c + 4.0, 2.0, -4.0), shape_b, 0.8, Vector3::new(0.25, 0.75, 0.35)),
+        make_parcel(Vector3::new(0.0 + 4.0, 2.0, -4.0), shape_c, 0.8, Vector3::new(0.25, 0.75, 0.35)),
     ];
 
     let axis_x = ParcelShape {
@@ -242,12 +281,44 @@ pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> [ParcelGpu; 6] {
         height: 0.01,
     };
 
-    [
+    let mut parcels = Vec::with_capacity(SCENE_PARCEL_COUNT);
+    parcels.extend_from_slice(&[
         make_parcel(Vector3::new(-4.0, 0.0, -5.0), axis_x, 1.0, Vector3::new(1.0, 0.0, 0.0)),
         make_parcel(Vector3::new(0.0, -4.0, -5.0), axis_y, 1.0, Vector3::new(0.0, 1.0, 0.0)),
         make_parcel(Vector3::new(0.0, 0.0, -7.0), axis_z, 1.0, Vector3::new(0.0, 0.2, 1.0)),
         sample_parcels[0],
         sample_parcels[1],
         sample_parcels[2],
-    ]
+    ]);
+
+    let mut tree_parcels = TREE_PARCELS
+        .get_or_init(tree::generate_tree_parcels)
+        .clone();
+    let remaining = SCENE_PARCEL_COUNT.saturating_sub(parcels.len());
+    if tree_parcels.len() > remaining {
+        tree_parcels.truncate(remaining);
+    }
+    parcels.extend(tree_parcels.clone());
+
+    static TREE_DEBUG_LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !TREE_DEBUG_LOGGED.load(std::sync::atomic::Ordering::Relaxed) {
+        let first_tree = tree_parcels.first();
+        godot_print!(
+            "scene buffer tree summary: tree_parcels={}, scene_capacity={}, inserted_count={}, first_tree_mean=({:.3}, {:.3}, {:.3}), first_tree_peak_density={:.3}",
+            tree_parcels.len(),
+            SCENE_PARCEL_COUNT,
+            tree_parcels.len().min(remaining),
+            first_tree.map_or(0.0, |p| p.mean[0]),
+            first_tree.map_or(0.0, |p| p.mean[1]),
+            first_tree.map_or(0.0, |p| p.mean[2]),
+            first_tree.map_or(0.0, |p| p.peak_density),
+        );
+        TREE_DEBUG_LOGGED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    while parcels.len() < SCENE_PARCEL_COUNT {
+        parcels.push(ParcelGpu::default());
+    }
+
+    parcels
 }

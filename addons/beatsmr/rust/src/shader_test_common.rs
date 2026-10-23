@@ -30,7 +30,10 @@ impl ComputeHarness {
     /// `output_floats` floats read back from binding 1.
     pub fn dispatch(&mut self, input: &[f32], output_floats: usize) -> Result<Vec<f32>, String> {
         const PARCEL_BUFFER_PARCELS: u32 = 100;
-        const PARCEL_BUFFER_FLOATS_PER_PARCEL: u32 = 25;
+        // Keep this aligned with Parcel in core/structs.glslinc:
+        // vec3 mean, mat3 covariance, mat3 inverseCovariance, float peakDensity, vec3 color
+        // with std430 padding, which totals 36 float slots per parcel.
+        const PARCEL_BUFFER_FLOATS_PER_PARCEL: u32 = 36;
         const PARCEL_BUFFER_BYTES: u32 = PARCEL_BUFFER_PARCELS * PARCEL_BUFFER_FLOATS_PER_PARCEL * 4;
 
         let mut input_bytes = Vec::with_capacity(input.len() * std::mem::size_of::<f32>());
