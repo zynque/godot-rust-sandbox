@@ -1,6 +1,22 @@
 #[compute]
 #version 450
 
+#ifndef MAX_PARCELS
+#define MAX_PARCELS 100
+#endif
+#ifndef MAX_PARCEL_INTERVALS
+#define MAX_PARCEL_INTERVALS MAX_PARCELS
+#endif
+#ifndef INTERVAL_BUCKET_COUNT
+#define INTERVAL_BUCKET_COUNT 16
+#endif
+#ifndef INTERVAL_BUCKET_POINTS
+#define INTERVAL_BUCKET_POINTS 17
+#endif
+#ifndef MAX_CLUSTER
+#define MAX_CLUSTER 10
+#endif
+
 // ---------------------------------------------------------------------------
 // Isolated harness for initialize_interval_bucket_weights() from
 // cluster/interval_buckets.glslinc.

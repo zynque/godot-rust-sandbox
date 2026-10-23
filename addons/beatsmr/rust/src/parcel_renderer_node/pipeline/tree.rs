@@ -54,8 +54,8 @@ fn make_tree_parcel(mean: Vector3, direction: Vector3, length: f32, thickness: f
 }
 
 pub(crate) fn generate_tree_parcels() -> Vec<ParcelGpu> {
-    const MAX_TREE_PARCELS: usize = 6;
-    const MAX_DEPTH: u32 = 2;
+    const MAX_TREE_PARCELS: usize = 12;
+    const MAX_DEPTH: u32 = 3;
 
     let mut parcels = Vec::new();
     let mut stack = vec![TreeSegment {

@@ -32,7 +32,7 @@ const SURFACE_SLOPE_EPSILON: f32 = 1e-6;
 /// Mirrors INTERVAL_SURFACE_SCAN_STEP in constants.glslinc.
 const SURFACE_SCAN_STEP: f32 = 0.005;
 /// Mirrors INTERVAL_SURFACE_SCAN_MAX_STEPS in constants.glslinc.
-const SURFACE_SCAN_MAX_STEPS: f32 = 512.0;
+const SURFACE_SCAN_MAX_STEPS: f32 = 16.0;
 
 /// The guarded Newton solve can stop a pass apart between the GPU and this
 /// mirror, so the settled position and density are compared more loosely than
