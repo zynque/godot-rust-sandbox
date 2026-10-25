@@ -2,18 +2,51 @@
 // Surface search over a parcel cluster
 // ---------------------------------------------------------------------------
 
-// Safeguarded Newton solve of total_parcel_density(p(t)) == ISOSURFACE on
+// Density of the cluster at ray parameter t. A parcel whose own boundary
+// interval does not contain t is at least PARCEL_BOUND_SIGMAS away from the
+// sample, so its remaining falloff is omitted. The estimate stays exact
+// wherever density can matter and only drops the sub-threshold tail, which
+// keeps a candidate interval's cost proportional to the parcels it touches.
+float cluster_density_at(vec3 p, float t, ParcelIntervals cluster) {
+    float density = 0.0;
+    for (uint i = 0u; i < cluster.size; i++) {
+        ParcelInterval interval = cluster.items[i];
+        if (t < interval.entry || t > interval.exit)
+            continue;
+        density += parcelDensity(p, parcel_buffer[uint(interval.parcel_index)]);
+    }
+    return density;
+}
+
+// Gradient of cluster_density_at() with respect to p, summed over the parcels
+// whose interval contains t. Omitted parcels contribute a constant, so they
+// contribute nothing to the gradient.
+vec3 cluster_density_gradient_at(vec3 p, float t, ParcelIntervals cluster) {
+    vec3 gradient = vec3(0.0);
+    for (uint i = 0u; i < cluster.size; i++) {
+        ParcelInterval interval = cluster.items[i];
+        if (t < interval.entry || t > interval.exit)
+            continue;
+        Parcel parcel = parcel_buffer[uint(interval.parcel_index)];
+        vec3 d = p - parcel.mean;
+        float density = parcelDensity(p, parcel);
+        gradient += -density * (parcel.inverseCovariance * d);
+    }
+    return gradient;
+}
+
+// Safeguarded Newton solve of cluster_density_at(p(t)) == ISOSURFACE on
 // [lo, hi], where the density sits at or below the threshold at lo and above it
 // at hi. Every pass narrows the bracket by the sign of the residual, then moves
 // t either along the ray-aligned density gradient (a Newton step) or to the
 // bracket midpoint. A Newton step is rejected and the bracket halved whenever
 // the slope is too shallow to divide by or the step would leave the bracket, so
 // the iteration cannot escape the crossing region.
-float refine_surface_distance(Ray ray, ParcelSet parcels, float lo, float hi) {
+float refine_surface_distance(Ray ray, ParcelIntervals cluster, float lo, float hi) {
     float t = 0.5 * (lo + hi);
     for (uint i = 0u; i < SURFACE_NEWTON_ITERATIONS; i++) {
         vec3 p = ray.origin + t * ray.direction;
-        float residual = total_parcel_density(p, parcels) - ISOSURFACE;
+        float residual = cluster_density_at(p, t, cluster) - ISOSURFACE;
         if (abs(residual) < SURFACE_RESIDUAL_EPSILON)
             break;
 
@@ -22,7 +55,7 @@ float refine_surface_distance(Ray ray, ParcelSet parcels, float lo, float hi) {
         else
             lo = t;
 
-        float slope = dot(total_parcel_density_gradient(p, parcels), ray.direction);
+        float slope = dot(cluster_density_gradient_at(p, t, cluster), ray.direction);
         float step = abs(slope) > SURFACE_SLOPE_EPSILON
             ? t - residual / slope
             : 0.5 * (lo + hi);
@@ -58,12 +91,19 @@ float parcel_interval_density_upper_bound(Ray ray, Parcel parcel, float a, float
     return parcel.peakDensity * exp(-0.5 * q_min);
 }
 
-// Conservative upper bound for the whole cluster over [a, b]. This is safe
-// because max(sum_i d_i(t)) <= sum_i max_t d_i(t).
-float cluster_interval_density_upper_bound(Ray ray, ParcelSet parcels, float a, float b) {
+// Conservative upper bound for the cluster over [a, b]. This is safe because
+// max(sum_i d_i(t)) <= sum_i max_t d_i(t). A parcel whose own interval misses
+// [a, b] is skipped rather than bounded: inside [a, b] it can only contribute
+// its falloff beyond PARCEL_BOUND_SIGMAS, and counting even that floor would
+// keep the sum from ever dropping under ISOSURFACE, so empty intervals could
+// no longer be pruned.
+float cluster_interval_density_upper_bound(Ray ray, ParcelIntervals cluster, float a, float b) {
     float upper = 0.0;
-    for (uint i = 0u; i < parcels.size; i++) {
-        Parcel parcel = parcel_buffer[parcels.indices[i]];
+    for (uint i = 0u; i < cluster.size; i++) {
+        ParcelInterval interval = cluster.items[i];
+        if (interval.entry > b || interval.exit < a)
+            continue;
+        Parcel parcel = parcel_buffer[uint(interval.parcel_index)];
         upper += parcel_interval_density_upper_bound(ray, parcel, a, b);
     }
     return upper;
@@ -71,17 +111,16 @@ float cluster_interval_density_upper_bound(Ray ray, ParcelSet parcels, float a, 
 
 // Adaptive local search for the first threshold crossing in a cluster. Each
 // candidate interval is pruned with a conservative upper bound; only the small
-// intervals that can still cross the threshold are refined and split.
-//
-// TODO optimization: any parcel whose intersecting boundary intervals are outside
-//                    of this interval can be excluded from the density calculation
-SurfaceSample search_cluster_surface_adaptive(Ray ray, ParcelSet parcels, float a, float b) {
+// intervals that can still cross the threshold are refined and split. Only the
+// parcels whose intervals touch a candidate take part in its evaluation, so the
+// cost of a candidate tracks the matter along it instead of the whole cluster.
+SurfaceSample search_cluster_surface_adaptive(Ray ray, ParcelIntervals cluster, float a, float b) {
     SurfaceSample result;
     result.position = a;
     result.density = 0.0;
     result.isSurface = false;
 
-    if (parcels.size == 0u)
+    if (cluster.size == 0u)
         return result;
 
     float stack_lo[MAX_ADAPTIVE_INTERVALS];
@@ -92,22 +131,22 @@ SurfaceSample search_cluster_surface_adaptive(Ray ray, ParcelSet parcels, float 
     stack_size++;
 
     float best_t = a;
-    float best_density = total_parcel_density(ray.origin + a * ray.direction, parcels);
+    float best_density = cluster_density_at(ray.origin + a * ray.direction, a, cluster);
 
     while (stack_size > 0) {
         stack_size--;
         float lo = stack_lo[stack_size];
         float hi = stack_hi[stack_size];
 
-        float upper = cluster_interval_density_upper_bound(ray, parcels, lo, hi);
+        float upper = cluster_interval_density_upper_bound(ray, cluster, lo, hi);
         if (upper < ISOSURFACE) {
             continue;
         }
 
         float width = hi - lo;
         if (width <= ADAPTIVE_INTERVAL_EPSILON) {
-            float d_lo = total_parcel_density(ray.origin + lo * ray.direction, parcels);
-            float d_hi = total_parcel_density(ray.origin + hi * ray.direction, parcels);
+            float d_lo = cluster_density_at(ray.origin + lo * ray.direction, lo, cluster);
+            float d_hi = cluster_density_at(ray.origin + hi * ray.direction, hi, cluster);
 
             if (d_lo > best_density) {
                 best_density = d_lo;
@@ -119,27 +158,29 @@ SurfaceSample search_cluster_surface_adaptive(Ray ray, ParcelSet parcels, float 
             }
 
             if (d_lo < ISOSURFACE && d_hi >= ISOSURFACE) {
-                float position = refine_surface_distance(ray, parcels, lo, hi);
+                float position = refine_surface_distance(ray, cluster, lo, hi);
                 result.position = position;
-                result.density = total_parcel_density(ray.origin + position * ray.direction, parcels);
+                result.density =
+                    cluster_density_at(ray.origin + position * ray.direction, position, cluster);
                 result.isSurface = true;
                 return result;
             }
             continue;
         }
 
-        float d_lo = total_parcel_density(ray.origin + lo * ray.direction, parcels);
-        float d_hi = total_parcel_density(ray.origin + hi * ray.direction, parcels);
+        float d_lo = cluster_density_at(ray.origin + lo * ray.direction, lo, cluster);
+        float d_hi = cluster_density_at(ray.origin + hi * ray.direction, hi, cluster);
         if (d_lo < ISOSURFACE && d_hi >= ISOSURFACE) {
-            float position = refine_surface_distance(ray, parcels, lo, hi);
+            float position = refine_surface_distance(ray, cluster, lo, hi);
             result.position = position;
-            result.density = total_parcel_density(ray.origin + position * ray.direction, parcels);
+            result.density =
+                cluster_density_at(ray.origin + position * ray.direction, position, cluster);
             result.isSurface = true;
             return result;
         }
 
         float mid = 0.5 * (lo + hi);
-        float d_mid = total_parcel_density(ray.origin + mid * ray.direction, parcels);
+        float d_mid = cluster_density_at(ray.origin + mid * ray.direction, mid, cluster);
         if (d_mid > best_density) {
             best_density = d_mid;
             best_t = mid;
@@ -154,9 +195,10 @@ SurfaceSample search_cluster_surface_adaptive(Ray ray, ParcelSet parcels, float 
             stack_size++;
         } else {
             // Fall back to a local refinement when the candidate stack is full.
-            float position = refine_surface_distance(ray, parcels, lo, hi);
+            float position = refine_surface_distance(ray, cluster, lo, hi);
             result.position = position;
-            result.density = total_parcel_density(ray.origin + position * ray.direction, parcels);
+            result.density =
+                cluster_density_at(ray.origin + position * ray.direction, position, cluster);
             result.isSurface = result.density >= ISOSURFACE;
             if (!result.isSurface) {
                 result.position = best_t;

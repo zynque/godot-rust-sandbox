@@ -33,15 +33,7 @@ float parcelDensity(vec3 p, Parcel parcel) {
     return parcel.peakDensity * falloff;
 }
 
-// Total density contributed by every parcel in the set at world point p.
-float total_parcel_density(vec3 p, ParcelSet parcels) {
-    float density = 0.0;
-    for (uint i = 0u; i < parcels.size; i++)
-        density += parcelDensity(p, parcel_buffer[parcels.indices[i]]);
-    return density;
-}
-
-// Gradient of total_parcel_density() with respect to p, summed over the set.
+// Gradient of the total parcel density with respect to p, summed over the set.
 vec3 total_parcel_density_gradient(vec3 p, ParcelSet parcels) {
     vec3 gradient = vec3(0.0);
     for (uint i = 0u; i < parcels.size; i++) {

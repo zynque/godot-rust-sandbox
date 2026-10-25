@@ -44,10 +44,10 @@ ParcelIntervals build_cluster(ParcelIntervals intervals, uint cluster_start) {
     return cluster;
 }
 
-SurfaceSample evaluate_cluster_surface(Ray ray, ParcelIntervals cluster, ParcelSet set) {
+SurfaceSample evaluate_cluster_surface(Ray ray, ParcelIntervals cluster) {
     float cluster_front = cluster.items[0].entry;
     float cluster_back = cluster.items[cluster.size - 1u].exit;
-    return search_cluster_surface_adaptive(ray, set, cluster_front, cluster_back);
+    return search_cluster_surface_adaptive(ray, cluster, cluster_front, cluster_back);
 }
 
 ParcelIntersection make_surface_intersection(Ray ray, SurfaceSample surface_sample, ParcelSet set) {
@@ -79,7 +79,7 @@ ParcelIntersection traceParcels(Ray ray, ParcelSet set) {
     uint cluster_start = 0u;
     while (cluster_start < intervals.size) {
         ParcelIntervals cluster = build_cluster(intervals, cluster_start);
-        SurfaceSample surface_sample = evaluate_cluster_surface(ray, cluster, set);
+        SurfaceSample surface_sample = evaluate_cluster_surface(ray, cluster);
 
         if (surface_sample.isSurface) {
             return make_surface_intersection(ray, surface_sample, set);
