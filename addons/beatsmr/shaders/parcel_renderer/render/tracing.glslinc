@@ -56,12 +56,19 @@ SurfaceSample evaluate_cluster_surface(Ray ray, ParcelIntervals cluster, ParcelS
         );
     }
 
-    SurfaceSample result = search_interval_bucket_surface(buckets, ray);
-    if (result.isSurface) {
-        return result;
-    }
+    float cluster_front = cluster.items[0].entry;
+    float cluster_back = cluster.items[cluster.size - 1u].exit;
+    SurfaceSample adaptive_result =
+        search_cluster_surface_adaptive(ray, buckets.parcels, cluster_front, cluster_back);
 
-    return result;
+    // SurfaceSample bucket_result = search_interval_bucket_surface(buckets, ray);
+    // if (adaptive_result.isSurface) {
+    //     return adaptive_result;
+    // }
+    // if (bucket_result.density > adaptive_result.density) {
+    //     return bucket_result;
+    // }
+    return adaptive_result;
 }
 
 ParcelIntersection make_surface_intersection(Ray ray, SurfaceSample surface_sample, ParcelSet set) {

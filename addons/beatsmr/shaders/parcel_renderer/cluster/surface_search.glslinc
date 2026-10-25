@@ -31,6 +31,148 @@ float refine_surface_distance(Ray ray, ParcelSet parcels, float lo, float hi) {
     return t;
 }
 
+// Exact per-parcel upper bound for the interval [a, b]. For a Gaussian parcel,
+// the ray density is d(t)=peak*exp(-0.5*q(t)) where q(t) is quadratic in t.
+// The maximum density on the interval occurs at the minimum q(t) within [a, b].
+float parcel_interval_density_upper_bound(Ray ray, Parcel parcel, float a, float b) {
+    vec3 oc = ray.origin - parcel.mean;
+    vec3 d = ray.direction;
+    mat3 A = parcel.inverseCovariance;
+
+    float alpha = dot(d, A * d);
+    float beta = dot(d, A * oc);
+    float gamma = dot(oc, A * oc);
+
+    if (abs(alpha) < 1e-8) {
+        vec3 pa = ray.origin + a * ray.direction;
+        vec3 pb = ray.origin + b * ray.direction;
+        return max(parcelDensity(pa, parcel), parcelDensity(pb, parcel));
+    }
+
+    float t_min = -beta / alpha;
+    float t_star = clamp(t_min, a, b);
+    vec3 p = ray.origin + t_star * ray.direction;
+    vec3 diff = p - parcel.mean;
+    float q_min = dot(diff, parcel.inverseCovariance * diff);
+
+    return parcel.peakDensity * exp(-0.5 * q_min);
+}
+
+// Conservative upper bound for the whole cluster over [a, b]. This is safe
+// because max(sum_i d_i(t)) <= sum_i max_t d_i(t).
+float cluster_interval_density_upper_bound(Ray ray, ParcelSet parcels, float a, float b) {
+    float upper = 0.0;
+    for (uint i = 0u; i < parcels.size; i++) {
+        Parcel parcel = parcel_buffer[parcels.indices[i]];
+        upper += parcel_interval_density_upper_bound(ray, parcel, a, b);
+    }
+    return upper;
+}
+
+// Adaptive local search for the first threshold crossing in a cluster. Each
+// candidate interval is pruned with a conservative upper bound; only the small
+// intervals that can still cross the threshold are refined and split.
+//
+// TODO optimization: any parcel whose intersecting boundary intervals are outside
+//                    of this interval can be excluded from the density calculation
+SurfaceSample search_cluster_surface_adaptive(Ray ray, ParcelSet parcels, float a, float b) {
+    SurfaceSample result;
+    result.position = a;
+    result.density = 0.0;
+    result.isSurface = false;
+
+    if (parcels.size == 0u)
+        return result;
+
+    const int MAX_ADAPTIVE_INTERVALS = 16;
+    const float ADAPTIVE_INTERVAL_EPSILON = 1e-4;
+    float stack_lo[MAX_ADAPTIVE_INTERVALS];
+    float stack_hi[MAX_ADAPTIVE_INTERVALS];
+    int stack_size = 0;
+    stack_lo[stack_size] = a;
+    stack_hi[stack_size] = b;
+    stack_size++;
+
+    float best_t = a;
+    float best_density = total_parcel_density(ray.origin + a * ray.direction, parcels);
+
+    while (stack_size > 0) {
+        stack_size--;
+        float lo = stack_lo[stack_size];
+        float hi = stack_hi[stack_size];
+
+        float upper = cluster_interval_density_upper_bound(ray, parcels, lo, hi);
+        if (upper < ISOSURFACE) {
+            continue;
+        }
+
+        float width = hi - lo;
+        if (width <= ADAPTIVE_INTERVAL_EPSILON) {
+            float d_lo = total_parcel_density(ray.origin + lo * ray.direction, parcels);
+            float d_hi = total_parcel_density(ray.origin + hi * ray.direction, parcels);
+
+            if (d_lo > best_density) {
+                best_density = d_lo;
+                best_t = lo;
+            }
+            if (d_hi > best_density) {
+                best_density = d_hi;
+                best_t = hi;
+            }
+
+            if (d_lo < ISOSURFACE && d_hi >= ISOSURFACE) {
+                float position = refine_surface_distance(ray, parcels, lo, hi);
+                result.position = position;
+                result.density = total_parcel_density(ray.origin + position * ray.direction, parcels);
+                result.isSurface = true;
+                return result;
+            }
+            continue;
+        }
+
+        float d_lo = total_parcel_density(ray.origin + lo * ray.direction, parcels);
+        float d_hi = total_parcel_density(ray.origin + hi * ray.direction, parcels);
+        if (d_lo < ISOSURFACE && d_hi >= ISOSURFACE) {
+            float position = refine_surface_distance(ray, parcels, lo, hi);
+            result.position = position;
+            result.density = total_parcel_density(ray.origin + position * ray.direction, parcels);
+            result.isSurface = true;
+            return result;
+        }
+
+        float mid = 0.5 * (lo + hi);
+        float d_mid = total_parcel_density(ray.origin + mid * ray.direction, parcels);
+        if (d_mid > best_density) {
+            best_density = d_mid;
+            best_t = mid;
+        }
+
+        if (stack_size + 2 < MAX_ADAPTIVE_INTERVALS) {
+            stack_lo[stack_size] = lo;
+            stack_hi[stack_size] = mid;
+            stack_size++;
+            stack_lo[stack_size] = mid;
+            stack_hi[stack_size] = hi;
+            stack_size++;
+        } else {
+            // Fall back to a local refinement when the candidate stack is full.
+            float position = refine_surface_distance(ray, parcels, lo, hi);
+            result.position = position;
+            result.density = total_parcel_density(ray.origin + position * ray.direction, parcels);
+            result.isSurface = result.density >= ISOSURFACE;
+            if (!result.isSurface) {
+                result.position = best_t;
+                result.density = best_density;
+            }
+            return result;
+        }
+    }
+
+    result.position = best_t;
+    result.density = best_density;
+    return result;
+}
+
 // Resolves the surface along the ray over the (already narrowed) bucket span
 // with exact density samples. The stochastic buckets have localized where
 // density is of interest; this walks that span at a fixed resolution with a
