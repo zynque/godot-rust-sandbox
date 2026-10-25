@@ -16,14 +16,13 @@ layout(set = 0, binding = 2, std140) uniform CameraParams {
 vec3 iResolution = vec3(1.0);
 float iTime = 0.0;
 
+
 // Modular parcel renderer assembled by GLSL includes.
 // Include order matters: each file may use definitions from the files above it.
-// A pixel's ray is intersected against the parcel set, the intervals are
-// stratified into buckets that are refined with stochastic density samples, and
-// each pass narrows the buckets around the density of interest before the
-// surface search looks for the first crossing
-// (see cluster/interval_bucket_narrowing.glslinc and
-// cluster/surface_search.glslinc).
+// A pixel's ray is intersected against the parcel set, its intervals are grouped
+// into clusters, and each cluster is searched adaptively for the first density
+// threshold crossing that marks a solid surface
+// (see cluster/surface_search.glslinc).
 // NOTE: Godot only reimports this shader when this file changes, not when an
 // included .glslinc changes, so reimport it after editing any include.
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/constants.glslinc"
@@ -31,10 +30,6 @@ float iTime = 0.0;
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/globals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/parcel_intervals.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_construction.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_observation.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_sampling.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_narrowing.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/surface_search.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/intervals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/render/tracing.glslinc"

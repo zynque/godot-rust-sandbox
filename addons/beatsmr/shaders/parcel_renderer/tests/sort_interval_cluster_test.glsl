@@ -7,12 +7,6 @@
 #ifndef MAX_PARCEL_INTERVALS
 #define MAX_PARCEL_INTERVALS MAX_PARCELS
 #endif
-#ifndef INTERVAL_BUCKET_COUNT
-#define INTERVAL_BUCKET_COUNT 16
-#endif
-#ifndef INTERVAL_BUCKET_POINTS
-#define INTERVAL_BUCKET_POINTS 17
-#endif
 #ifndef MAX_CLUSTER
 #define MAX_CLUSTER 10
 #endif
@@ -43,9 +37,6 @@ vec3 iResolution = vec3(1.0);
 #include "res://addons/beatsmr/shaders/parcel_renderer/core/parcel_math.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/parcel_intervals.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_cluster.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_construction.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_observation.glslinc"
-#include "res://addons/beatsmr/shaders/parcel_renderer/cluster/interval_bucket_sampling.glslinc"
 #include "res://addons/beatsmr/shaders/parcel_renderer/tests/test_harness.glslinc"
 
 void main() {

@@ -24,7 +24,7 @@ struct ParcelIntersection {
     vec3 color;
 };
 
-// Outcome of searching a ray's interval buckets for matter: where along the
+// Outcome of searching a ray's interval cluster for matter: where along the
 // ray the search settled and the density there.
 struct SurfaceSample {
     // Distance along the ray.
@@ -32,7 +32,7 @@ struct SurfaceSample {
     // Total parcel density at that distance.
     float density;
     // True when a threshold crossing was found and refined to the surface;
-    // false when no crossing was observed and the densest bucket was returned.
+    // false when no crossing was observed and the densest candidate returned.
     bool isSurface;
 };
 
@@ -75,22 +75,4 @@ struct ParcelIntervalCluster {
     float[MAX_PARCELS] inflection_points;
     ParcelSet parcels;
     uint size;
-};
-
-struct ParcelIntervalBucketWeights16 {
-    // positions along ray ordered front to back
-    // each pair of consecutive positions define a bucket
-    // note length is 1 more than the number of buckets
-    float[INTERVAL_BUCKET_POINTS] buckets;
-    // Per bucket, estimated from the density observations inside it:
-    // positions[] is where that density is estimated to sit along the ray,
-    // evidence[] the average squared density observed (the mean of the sample
-    // weights), samples[] how many density samples the bucket has tested and
-    // deviations[] the accumulated weighted squared deviation around
-    // positions[].
-    float[INTERVAL_BUCKET_COUNT] positions;
-    float[INTERVAL_BUCKET_COUNT] evidence;
-    uint[INTERVAL_BUCKET_COUNT] samples;
-    float[INTERVAL_BUCKET_COUNT] deviations;
-    ParcelSet parcels;
 };

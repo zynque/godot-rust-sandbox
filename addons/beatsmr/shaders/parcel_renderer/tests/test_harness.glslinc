@@ -53,39 +53,6 @@ void write_interval_cluster(ParcelIntervalCluster cluster) {
     }
 }
 
-// Writes bucket estimates as [parcels.size, then the bucket boundaries, then
-// the positions, the evidence, the samples and the deviations per bucket, then
-// the parcel indices].
-void write_bucket_weights(ParcelIntervalBucketWeights16 buckets) {
-    output_data[0] = float(buckets.parcels.size);
-
-    uint cursor = 1u;
-    for (uint i = 0u; i < INTERVAL_BUCKET_POINTS; i++) {
-        output_data[cursor] = buckets.buckets[i];
-        cursor++;
-    }
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        output_data[cursor] = buckets.positions[i];
-        cursor++;
-    }
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        output_data[cursor] = buckets.evidence[i];
-        cursor++;
-    }
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        output_data[cursor] = float(buckets.samples[i]);
-        cursor++;
-    }
-    for (uint i = 0u; i < INTERVAL_BUCKET_COUNT; i++) {
-        output_data[cursor] = buckets.deviations[i];
-        cursor++;
-    }
-    for (uint i = 0u; i < buckets.parcels.size; i++) {
-        output_data[cursor] = float(buckets.parcels.indices[i]);
-        cursor++;
-    }
-}
-
 // Writes a surface sample as [position, density, isSurface].
 void write_surface_sample(SurfaceSample result) {
     output_data[0] = result.position;
