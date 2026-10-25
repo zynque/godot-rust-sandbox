@@ -6,11 +6,16 @@ layout(set = 0, binding = 0, rgba32f) uniform image2D output_image;
 
 layout(set = 0, binding = 1, std140) uniform TimeParams {
 	vec4 t;
+	// scene.x: number of parcels the parcel buffer currently holds.
+	vec4 scene;
 } time_params;
 
 layout(set = 0, binding = 2, std140) uniform CameraParams {
-    mat4 view;
-    mat4 projection;
+    // Inverses of the view and projection matrices, computed once per frame
+    // because the per-pixel ray construction needs them and inverting a mat4
+    // per pixel is slow.
+    mat4 inverse_view;
+    mat4 inverse_projection;
 } camera_params;
 
 vec3 iResolution = vec3(1.0);

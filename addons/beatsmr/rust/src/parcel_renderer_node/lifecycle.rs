@@ -48,7 +48,16 @@ impl ParcelRendererNode {
             return Vector2::ZERO;
         }
 
-        Vector2::new(width as f32, height as f32)
+        if !self.render_scale.is_finite() || self.render_scale <= 0.0 {
+            godot_error!(
+                "ParcelRendererNode: render_scale must be a positive finite number, got {}.",
+                self.render_scale,
+            );
+            return Vector2::ZERO;
+        }
+
+        let scaled = Vector2::new(width as f32, height as f32) * self.render_scale;
+        Vector2::new(scaled.x.round().max(1.0), scaled.y.round().max(1.0))
     }
 
     fn resources_ready(&self) -> bool {
@@ -143,44 +152,53 @@ impl ParcelRendererNode {
             self.time_seconds += delta as f32;
         }
 
-        if let Some(mut rd) = self.rd.take() {
-            if self.time_buffer_rid != Rid::Invalid {
-                let time_data = [self.time_seconds, 0.0f32, 0.0f32, 0.0f32];
-                let mut bytes = Vec::with_capacity(16);
-                for f in time_data {
-                    bytes.extend_from_slice(&f.to_le_bytes());
-                }
-                let packed = PackedByteArray::from(bytes.as_slice());
-                let _ = rd.buffer_update(self.time_buffer_rid, 0, 16, &packed);
-            }
+        let camera_data = self.camera_data_for_frame();
 
-            let camera_data = self.camera_data_for_frame();
-            if self.camera_buffer_rid != Rid::Invalid {
-                let _ = rd.buffer_update(self.camera_buffer_rid, 0, 128, &camera_data);
-            }
+        let Some(mut rd) = self.rd.take() else {
+            return;
+        };
 
-            if self.parcel_buffer_rid != Rid::Invalid {
-                let parcels = ParcelRendererNode::sample_parcel_buffer(self.time_seconds);
-                let mut bytes = Vec::with_capacity(parcels.len() * std::mem::size_of::<f32>());
-                for value in parcels {
-                    bytes.extend_from_slice(&value.to_le_bytes());
-                }
-                let packed = PackedByteArray::from(bytes.as_slice());
-                let _ = rd.buffer_update(
-                    self.parcel_buffer_rid,
-                    0,
-                    ParcelRendererNode::parcel_buffer_size_bytes(),
-                    &packed,
-                );
-            }
+        let (parcel_data, parcel_count) =
+            ParcelRendererNode::sample_parcel_buffer(self.time_seconds);
 
-            let list = rd.compute_list_begin();
-            rd.compute_list_bind_compute_pipeline(list, self.pipeline_rid);
-            rd.compute_list_bind_uniform_set(list, self.uniform_set_rid, 0);
-            rd.compute_list_dispatch(list, self.width.div_ceil(8), self.height.div_ceil(8), 1);
-            rd.compute_list_end();
-            self.rd = Some(rd);
+        if self.time_buffer_rid != Rid::Invalid {
+            let frame_data = [
+                self.time_seconds,
+                0.0f32,
+                0.0f32,
+                0.0f32,
+                parcel_count as f32,
+                0.0f32,
+                0.0f32,
+                0.0f32,
+            ];
+            let mut bytes = Vec::with_capacity(32);
+            for value in frame_data {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            let packed = PackedByteArray::from(bytes.as_slice());
+            let _ = rd.buffer_update(self.time_buffer_rid, 0, 32, &packed);
         }
+
+        if self.camera_buffer_rid != Rid::Invalid {
+            let _ = rd.buffer_update(self.camera_buffer_rid, 0, 128, &camera_data);
+        }
+
+        if self.parcel_buffer_rid != Rid::Invalid && !parcel_data.is_empty() {
+            let mut bytes = Vec::with_capacity(parcel_data.len() * std::mem::size_of::<f32>());
+            for value in parcel_data {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            let packed = PackedByteArray::from(bytes.as_slice());
+            let _ = rd.buffer_update(self.parcel_buffer_rid, 0, packed.len() as u32, &packed);
+        }
+
+        let list = rd.compute_list_begin();
+        rd.compute_list_bind_compute_pipeline(list, self.pipeline_rid);
+        rd.compute_list_bind_uniform_set(list, self.uniform_set_rid, 0);
+        rd.compute_list_dispatch(list, self.width.div_ceil(8), self.height.div_ceil(8), 1);
+        rd.compute_list_end();
+        self.rd = Some(rd);
 
         self.base_mut().queue_redraw();
     }

@@ -11,10 +11,12 @@ impl ParcelRendererNode {
     pub(super) fn attach_preview_texture(&mut self) {
         let mut texture = Texture2Drd::new_gd();
         texture.set_texture_rd_rid(self.texture_rid);
+        let preview_scale = Vector2::splat(1.0 / self.render_scale);
 
         if let Some(mut sprite) = self.base().try_get_node_as::<Sprite2D>(PREVIEW_NAME) {
             sprite.set_texture(&texture);
             sprite.set_centered(false);
+            sprite.set_scale(preview_scale);
             return;
         }
 
@@ -22,6 +24,7 @@ impl ParcelRendererNode {
         sprite.set_name(PREVIEW_NAME);
         sprite.set_texture(&texture);
         sprite.set_centered(false);
+        sprite.set_scale(preview_scale);
         self.base_mut().add_child(&sprite);
     }
 

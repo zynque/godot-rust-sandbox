@@ -84,8 +84,6 @@ SurfaceSample search_cluster_surface_adaptive(Ray ray, ParcelSet parcels, float 
     if (parcels.size == 0u)
         return result;
 
-    const int MAX_ADAPTIVE_INTERVALS = 16;
-    const float ADAPTIVE_INTERVAL_EPSILON = 1e-4;
     float stack_lo[MAX_ADAPTIVE_INTERVALS];
     float stack_hi[MAX_ADAPTIVE_INTERVALS];
     int stack_size = 0;

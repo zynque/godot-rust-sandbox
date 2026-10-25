@@ -17,8 +17,11 @@
 #ifndef MAX_CANDIDATES
 #define MAX_CANDIDATES 32
 #endif
+// Culling bound for a parcel's ray interval, in standard deviations. Lowering
+// this shrinks every cluster's search span, but clips density that lies beyond
+// this many sigmas.
 #ifndef PARCEL_BOUND_SIGMAS
-#define PARCEL_BOUND_SIGMAS 3.0
+#define PARCEL_BOUND_SIGMAS 2.0
 #endif
 #ifndef MAX_CLUSTER
 #define MAX_CLUSTER 10
@@ -26,9 +29,6 @@
 
 #ifndef MAX_PARCELS
 #define MAX_PARCELS 30
-#endif
-#ifndef SCENE_PARCEL_COUNT
-#define SCENE_PARCEL_COUNT MAX_PARCELS
 #endif
 
 // intersect_parcels() returns at most one interval per parcel in the set.
@@ -46,11 +46,23 @@
 // ray-aligned slope is too shallow to divide by (below SURFACE_SLOPE_EPSILON)
 // or the Newton step would leave the bracket, in which case it bisects instead.
 #ifndef SURFACE_NEWTON_ITERATIONS
-#define SURFACE_NEWTON_ITERATIONS 5
+#define SURFACE_NEWTON_ITERATIONS 3
 #endif
 #ifndef SURFACE_RESIDUAL_EPSILON
 #define SURFACE_RESIDUAL_EPSILON 1e-5
 #endif
 #ifndef SURFACE_SLOPE_EPSILON
 #define SURFACE_SLOPE_EPSILON 1e-6
+#endif
+
+// search_cluster_surface_adaptive() splits candidate intervals until they are
+// this narrow, then refines the crossing inside them. Larger values stop the
+// subdivision earlier (faster, coarser) and smaller values refine further.
+#ifndef ADAPTIVE_INTERVAL_EPSILON
+#define ADAPTIVE_INTERVAL_EPSILON 1e-2
+#endif
+// Candidate interval stack depth. Each entry costs one upper-bound test plus up
+// to three density samples, so this bounds the worst-case cost per cluster.
+#ifndef MAX_ADAPTIVE_INTERVALS
+#define MAX_ADAPTIVE_INTERVALS 12
 #endif

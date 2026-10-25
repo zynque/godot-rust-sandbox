@@ -25,6 +25,10 @@ pub struct ParcelRendererNode {
     time_seconds: f32,
     #[export]
     animate: bool,
+    /// Fraction of the project viewport the compute shader renders at. The
+    /// preview is scaled back up, so values below 1 trade sharpness for speed.
+    #[export]
+    render_scale: f32,
     logged_waiting_for_size: bool,
     editor_selected: bool,
     editor_selection_known: bool,
@@ -47,6 +51,7 @@ impl INode2D for ParcelRendererNode {
             height: 0,
             time_seconds: 0.0,
             animate: true,
+            render_scale: 1.0,
             logged_waiting_for_size: false,
             editor_selected: false,
             editor_selection_known: false,

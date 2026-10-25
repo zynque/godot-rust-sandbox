@@ -89,13 +89,15 @@ pub(super) fn create_texture(node: &mut ParcelRendererNode, rd: &mut Gd<Renderin
 }
 
 fn create_time_buffer(node: &mut ParcelRendererNode, rd: &mut Gd<RenderingDevice>) {
-    node.time_buffer_rid = rd.uniform_buffer_create(16);
+    // vec4 time + vec4 scene params.
+    node.time_buffer_rid = rd.uniform_buffer_create(32);
     if node.time_buffer_rid == Rid::Invalid {
         godot_warn!("ParcelRendererNode: failed to create iTime uniform buffer.");
     }
 }
 
 fn create_camera_buffer(node: &mut ParcelRendererNode, rd: &mut Gd<RenderingDevice>) {
+    // Inverse view and inverse projection.
     node.camera_buffer_rid = rd.uniform_buffer_create(128);
     if node.camera_buffer_rid == Rid::Invalid {
         godot_warn!("ParcelRendererNode: failed to create camera uniform buffer.");

@@ -13,18 +13,20 @@ impl ParcelRendererNode {
         (geometry::MAX_PARCELS * PARCEL_FLOATS_PER_INSTANCE * std::mem::size_of::<f32>()) as u32
     }
 
-    pub(super) fn sample_parcel_buffer(time_seconds: f32) -> Vec<f32> {
+    /// Flat float data for the parcel storage buffer plus the number of parcels
+    /// it holds, so the shader only walks parcels that actually exist.
+    pub(super) fn sample_parcel_buffer(time_seconds: f32) -> (Vec<f32>, u32) {
         let parcels = sample_parcels_for_time(time_seconds);
         static BUFFER_UPLOAD_LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if !BUFFER_UPLOAD_LOGGED.load(std::sync::atomic::Ordering::Relaxed) {
             godot_print!(
                 "scene buffer upload: {} parcels (capacity: {})",
                 parcels.len(),
-                geometry::SCENE_PARCEL_COUNT,
+                geometry::MAX_PARCELS,
             );
             BUFFER_UPLOAD_LOGGED.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        let mut values = vec![0.0f32; geometry::SCENE_PARCEL_COUNT * PARCEL_FLOATS_PER_INSTANCE];
+        let mut values = vec![0.0f32; parcels.len() * PARCEL_FLOATS_PER_INSTANCE];
 
         for (index, parcel) in parcels.iter().enumerate() {
             let start = index * PARCEL_FLOATS_PER_INSTANCE;
@@ -32,7 +34,7 @@ impl ParcelRendererNode {
             values[start..start + PARCEL_FLOATS_PER_INSTANCE].copy_from_slice(&packed);
         }
 
-        values
+        (values, parcels.len() as u32)
     }
 
     pub(super) fn camera_data_for_frame(&mut self) -> PackedByteArray {

@@ -18,19 +18,6 @@ pub(crate) struct ParcelGpu {
     pub color: GpuVec3,
 }
 
-impl Default for ParcelGpu {
-    fn default() -> Self {
-        Self {
-            mean: [0.0; 4],
-            covariance: [0.0; 12],
-            inverse_covariance: [0.0; 12],
-            peak_density: 0.0,
-            peak_padding: [0.0; 3],
-            color: [0.0; 4],
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct ParcelShape {
     pub forward: Vector3,
@@ -41,7 +28,6 @@ pub(crate) struct ParcelShape {
 }
 
 pub(crate) const MAX_PARCELS: usize = 30;
-pub(crate) const SCENE_PARCEL_COUNT: usize = MAX_PARCELS;
 pub(crate) const PARCEL_FLOATS_PER_INSTANCE: usize = 36;
 
 impl ParcelGpu {
@@ -198,16 +184,17 @@ pub(crate) fn projection_to_mat4_cols(projection: Projection) -> [f32; 16] {
 }
 
 pub(crate) fn camera_uniform_bytes(camera_transform: Transform3D, camera_projection: Projection) -> PackedByteArray {
-    let view = camera_transform.affine_inverse();
-    let view_floats = transform3d_to_mat4_cols(view);
-    let projection_floats = projection_to_mat4_cols(camera_projection);
+    // Rays are built from the inverse matrices only, so the forward view and
+    // projection are not uploaded. The camera transform is itself the inverse
+    // of the view matrix.
+    let inverse_view_floats = transform3d_to_mat4_cols(camera_transform);
+    let inverse_projection_floats = projection_to_mat4_cols(camera_projection.inverse());
 
     let mut bytes = Vec::with_capacity(32 * std::mem::size_of::<f32>());
-    for f in view_floats {
-        bytes.extend_from_slice(&f.to_le_bytes());
-    }
-    for f in projection_floats {
-        bytes.extend_from_slice(&f.to_le_bytes());
+    for matrix in [inverse_view_floats, inverse_projection_floats] {
+        for f in matrix {
+            bytes.extend_from_slice(&f.to_le_bytes());
+        }
     }
 
     PackedByteArray::from(bytes.as_slice())
@@ -281,7 +268,7 @@ pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> Vec<ParcelGpu> {
         height: 0.01,
     };
 
-    let mut parcels = Vec::with_capacity(SCENE_PARCEL_COUNT);
+    let mut parcels = Vec::with_capacity(MAX_PARCELS);
     parcels.extend_from_slice(&[
         make_parcel(Vector3::new(-4.0, 0.0, -5.0), axis_x, 1.0, Vector3::new(1.0, 0.0, 0.0)),
         make_parcel(Vector3::new(0.0, -4.0, -5.0), axis_y, 1.0, Vector3::new(0.0, 1.0, 0.0)),
@@ -294,7 +281,7 @@ pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> Vec<ParcelGpu> {
     let mut tree_parcels = TREE_PARCELS
         .get_or_init(tree::generate_tree_parcels)
         .clone();
-    let remaining = SCENE_PARCEL_COUNT.saturating_sub(parcels.len());
+    let remaining = MAX_PARCELS.saturating_sub(parcels.len());
     if tree_parcels.len() > remaining {
         tree_parcels.truncate(remaining);
     }
@@ -306,7 +293,7 @@ pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> Vec<ParcelGpu> {
         godot_print!(
             "scene buffer tree summary: tree_parcels={}, scene_capacity={}, inserted_count={}, first_tree_mean=({:.3}, {:.3}, {:.3}), first_tree_peak_density={:.3}",
             tree_parcels.len(),
-            SCENE_PARCEL_COUNT,
+            MAX_PARCELS,
             tree_parcels.len().min(remaining),
             first_tree.map_or(0.0, |p| p.mean[0]),
             first_tree.map_or(0.0, |p| p.mean[1]),
@@ -314,10 +301,6 @@ pub(crate) fn sample_parcels_for_time(time_seconds: f32) -> Vec<ParcelGpu> {
             first_tree.map_or(0.0, |p| p.peak_density),
         );
         TREE_DEBUG_LOGGED.store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    while parcels.len() < SCENE_PARCEL_COUNT {
-        parcels.push(ParcelGpu::default());
     }
 
     parcels

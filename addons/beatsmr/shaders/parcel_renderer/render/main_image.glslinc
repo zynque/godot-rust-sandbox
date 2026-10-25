@@ -1,5 +1,5 @@
 vec3 getCameraPosition() {
-    return (inverse(camera_params.view) * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    return (camera_params.inverse_view * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 }
 
 vec3 getCameraDirection(vec2 fragCoord) {
@@ -9,20 +9,20 @@ vec3 getCameraDirection(vec2 fragCoord) {
     vec4 nearClip = vec4(normalized, -1.0, 1.0);
     vec4 farClip = vec4(normalized, 1.0, 1.0);
 
-    vec4 nearView = inverse(camera_params.projection) * nearClip;
-    vec4 farView = inverse(camera_params.projection) * farClip;
+    vec4 nearView = camera_params.inverse_projection * nearClip;
+    vec4 farView = camera_params.inverse_projection * farClip;
     nearView /= nearView.w;
     farView /= farView.w;
 
-    vec4 nearWorld = inverse(camera_params.view) * nearView;
-    vec4 farWorld = inverse(camera_params.view) * farView;
+    vec4 nearWorld = camera_params.inverse_view * nearView;
+    vec4 farWorld = camera_params.inverse_view * farView;
     return normalize((farWorld.xyz - nearWorld.xyz));
 }
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     ParcelSet set;
-    set.size = SCENE_PARCEL_COUNT;
+    set.size = min(uint(time_params.scene.x), uint(MAX_PARCELS));
     for (uint i = 0u; i < set.size; i++) {
         set.indices[i] = i;
     }
