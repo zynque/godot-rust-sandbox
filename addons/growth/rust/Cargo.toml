@@ -1,0 +1,8 @@
+[package]
+name = "growth"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+
+[dependencies]
+godot = {version = "0.5.5", features = ["api-4-5"]}

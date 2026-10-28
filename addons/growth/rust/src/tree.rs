@@ -1,6 +1,11 @@
-use godot::prelude::*;
+//! A small branching tree built from parcels, for demos and tests.
 
-use super::geometry::{covariance_from_shape, inverse_covariance_from_shape, ParcelGpu, ParcelShape};
+use godot::builtin::Vector3;
+
+use crate::parcels::{Parcel, ParcelShape};
+
+const MAX_TREE_PARCELS: usize = 12;
+const MAX_DEPTH: u32 = 3;
 
 #[derive(Clone, Copy)]
 struct TreeSegment {
@@ -25,7 +30,13 @@ fn rotate_about_axis(vector: Vector3, axis: Vector3, angle_radians: f32) -> Vect
     vector * cos_a + cross * sin_a + axis_normalized * dot * (1.0 - cos_a)
 }
 
-fn make_tree_parcel(mean: Vector3, direction: Vector3, length: f32, thickness: f32, color: Vector3) -> ParcelGpu {
+fn make_tree_parcel(
+    mean: Vector3,
+    direction: Vector3,
+    length: f32,
+    thickness: f32,
+    color: Vector3,
+) -> Parcel {
     let reference = if direction.dot(Vector3::UP).abs() > 0.9 {
         Vector3::RIGHT
     } else {
@@ -41,22 +52,11 @@ fn make_tree_parcel(mean: Vector3, direction: Vector3, length: f32, thickness: f
         height: thickness * 0.9,
     };
 
-    let covariance = covariance_from_shape(shape);
-    let inverse_covariance = inverse_covariance_from_shape(shape);
-    ParcelGpu {
-        mean: [mean.x, mean.y, mean.z, 0.0],
-        covariance,
-        inverse_covariance,
-        peak_density: 12.0,
-        peak_padding: [0.0, 0.0, 0.0],
-        color: [color.x, color.y, color.z, 0.0],
-    }
+    Parcel::new(mean, shape, 1.0, color)
 }
 
-pub(crate) fn generate_tree_parcels() -> Vec<ParcelGpu> {
-    const MAX_TREE_PARCELS: usize = 12;
-    const MAX_DEPTH: u32 = 3;
-
+/// Generates at most `MAX_TREE_PARCELS` parcels describing a small tree.
+pub fn generate_tree_parcels() -> Vec<Parcel> {
     let mut parcels = Vec::new();
     let mut stack = vec![TreeSegment {
         origin: Vector3::ZERO,
@@ -74,9 +74,13 @@ pub(crate) fn generate_tree_parcels() -> Vec<ParcelGpu> {
         let mean = segment.origin + segment.direction * segment.length * 0.5;
         let green_tone = 0.35 + (segment.depth as f32) * 0.12;
         let trunk_color = Vector3::new(0.15, green_tone.clamp(0.4, 1.0), 0.12);
-        let mut parcel = make_tree_parcel(mean, segment.direction, segment.length, segment.thickness, trunk_color);
-        parcel.peak_density = 1.0;
-        parcels.push(parcel);
+        parcels.push(make_tree_parcel(
+            mean,
+            segment.direction,
+            segment.length,
+            segment.thickness,
+            trunk_color,
+        ));
 
         if segment.depth >= MAX_DEPTH {
             continue;
@@ -95,7 +99,11 @@ pub(crate) fn generate_tree_parcels() -> Vec<ParcelGpu> {
             let nudge = if branch_index == 0 { -1.0 } else { 1.0 };
             let twist_axis = Vector3::new(0.0, 0.0, 1.0);
             let branch_dir = rotate_about_axis(segment.direction, twist_axis, spread * nudge);
-            let branch_dir = rotate_about_axis(branch_dir, Vector3::new(1.0, 0.0, 0.0), 0.18 + segment.depth as f32 * 0.04);
+            let branch_dir = rotate_about_axis(
+                branch_dir,
+                Vector3::new(1.0, 0.0, 0.0),
+                0.18 + segment.depth as f32 * 0.04,
+            );
             let direction = if branch_dir.length_squared() <= f32::EPSILON {
                 segment.direction
             } else {
@@ -109,29 +117,6 @@ pub(crate) fn generate_tree_parcels() -> Vec<ParcelGpu> {
                 depth: segment.depth + 1,
             });
         }
-    }
-
-    godot_print!(
-        "tree parcels generated: {} (max: {})",
-        parcels.len(),
-        MAX_TREE_PARCELS,
-    );
-    for (index, parcel) in parcels.iter().enumerate() {
-        let mean = Vector3::new(parcel.mean[0], parcel.mean[1], parcel.mean[2]);
-        let color = Vector3::new(parcel.color[0], parcel.color[1], parcel.color[2]);
-        let inv = parcel.inverse_covariance;
-        godot_print!(
-            "tree parcel[{}]: mean=({}, {}, {}), peak_density={}, color=({}, {}, {}), inverse_covariance=[{:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}, {:.6}]",
-            index,
-            mean.x,
-            mean.y,
-            mean.z,
-            parcel.peak_density,
-            color.x,
-            color.y,
-            color.z,
-            inv[0], inv[1], inv[2], inv[3], inv[4], inv[5], inv[6], inv[7], inv[8], inv[9], inv[10], inv[11],
-        );
     }
 
     parcels

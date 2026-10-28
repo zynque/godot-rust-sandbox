@@ -1,0 +1,11 @@
+[gd_scene format=3 uid="uid://d38ksumi3eiuh"]
+
+[node name="ExampleScene" type="Node2D"]
+
+[node name="ParcelRenderer" type="ParcelRendererNode" parent="."]
+
+[node name="ExampleSceneNode" type="ExampleSceneNode" parent="."]
+renderer_path = NodePath("../ParcelRenderer")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(-0.765236, -0.16226956, 0.62296265, 0.18006434, 0.8751278, 0.44914147, -0.6180539, 0.45587254, -0.6404604, 3.9044125, 4.0303273, -9.17027)

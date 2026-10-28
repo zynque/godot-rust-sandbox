@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="godot"
-run/main_scene="uid://823qgp6fn0l7"
+run/main_scene="res://scene.tscn"
 config/features=PackedStringArray("4.5", "Mobile")
 
 [editor_plugins]

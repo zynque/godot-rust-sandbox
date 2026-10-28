@@ -1,0 +1,6 @@
+# Rust build artifacts for the growth addon crate
+rust/target/
+
+# Local rustc/cargo metadata generated during builds
+rust/.rustc_info.json
+rust/Cargo.lock

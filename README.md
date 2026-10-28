@@ -12,4 +12,4 @@ As for the editor, I prefer Visual Studio Code with the rust-analyzer plugin
 
 __Note__ that the Godot version and the godot-rust version need to be compatible. Godot-Rust docs were out of date in this regard. Look at release notes for godot-rust to see exactly what is supported when. In this project the godot-rust version is currently set to "0.5.5" and Godot is 4.5.
 
-Once the required tools are installed, run `cargo build` from the `addons/beatsmr/rust` folder, and then import the project in Godot and run it.
+Once the required tools are installed, run `build.bat` from the repository root, or run `cargo build` from the `rust` folder (the demo scene, which also builds the `addons/growth` parcel library) and from the `addons/beatsmr/rust` folder (the parcel renderer), and then import the project in Godot and run it.

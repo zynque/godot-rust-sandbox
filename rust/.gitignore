@@ -1,0 +1,3 @@
+# Rust build artifacts for the root sandbox crate
+target/
+.rustc_info.json

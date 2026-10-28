@@ -110,7 +110,12 @@ fn create_parcel_buffer(node: &mut ParcelRendererNode, rd: &mut Gd<RenderingDevi
     node.parcel_buffer_rid = rd.storage_buffer_create_ex(byte_count).data(&initial_data).done();
     if node.parcel_buffer_rid == Rid::Invalid {
         godot_warn!("ParcelRendererNode: failed to create parcel storage buffer.");
+        return;
     }
+
+    // The fresh buffer is zeroed, so whatever parcels are already loaded have
+    // to be uploaded again on the next frame.
+    node.parcel_data_dirty = true;
 }
 
 pub(super) fn recreate_resources(node: &mut ParcelRendererNode, rd: &mut Gd<RenderingDevice>) {

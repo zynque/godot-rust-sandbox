@@ -2,6 +2,7 @@ use godot::classes::{Engine, ProjectSettings, RenderingServer};
 use godot::prelude::*;
 
 use super::ParcelRendererNode;
+use super::pipeline::{parcel_bytes, PARCEL_FLOATS_PER_INSTANCE};
 
 impl ParcelRendererNode {
     fn ensure_render_device(&mut self) -> bool {
@@ -158,8 +159,7 @@ impl ParcelRendererNode {
             return;
         };
 
-        let (parcel_data, parcel_count) =
-            ParcelRendererNode::sample_parcel_buffer(self.time_seconds);
+        let parcel_count = (self.parcel_data.len() / PARCEL_FLOATS_PER_INSTANCE) as f32;
 
         if self.time_buffer_rid != Rid::Invalid {
             let frame_data = [
@@ -167,7 +167,7 @@ impl ParcelRendererNode {
                 0.0f32,
                 0.0f32,
                 0.0f32,
-                parcel_count as f32,
+                parcel_count,
                 0.0f32,
                 0.0f32,
                 0.0f32,
@@ -184,13 +184,12 @@ impl ParcelRendererNode {
             let _ = rd.buffer_update(self.camera_buffer_rid, 0, 128, &camera_data);
         }
 
-        if self.parcel_buffer_rid != Rid::Invalid && !parcel_data.is_empty() {
-            let mut bytes = Vec::with_capacity(parcel_data.len() * std::mem::size_of::<f32>());
-            for value in parcel_data {
-                bytes.extend_from_slice(&value.to_le_bytes());
+        if self.parcel_buffer_rid != Rid::Invalid && self.parcel_data_dirty {
+            let packed = parcel_bytes(&self.parcel_data);
+            if !packed.is_empty() {
+                let _ = rd.buffer_update(self.parcel_buffer_rid, 0, packed.len() as u32, &packed);
             }
-            let packed = PackedByteArray::from(bytes.as_slice());
-            let _ = rd.buffer_update(self.parcel_buffer_rid, 0, packed.len() as u32, &packed);
+            self.parcel_data_dirty = false;
         }
 
         let list = rd.compute_list_begin();
