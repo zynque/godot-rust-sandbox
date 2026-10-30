@@ -50,6 +50,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord)
         color *= max(light, 0.15);
     }
     else {
+        color *= 0.0;
+
+        // Apply density-based shading for diagnostics.
         color *= clamp(intersection.density, 0.0, 1.0);
     }
 
