@@ -1,6 +1,8 @@
 # godot-rust-sandbox
 Toy Project for Learning Rust with Godot
 
+<img width="760" height="498" alt="Screenshot 2026-11-10 102520" src="https://github.com/user-attachments/assets/fcdff55d-d29b-40eb-94d9-9e74aa1a9b50" />
+
 See the Godot-Rust documentation here: https://godot-rust.github.io/
 
 The following need to be installed in order for this to run:
